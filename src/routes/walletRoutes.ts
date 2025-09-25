@@ -9,7 +9,7 @@ import {
 } from "../controllers/WalletController";
 
 import { protect } from "../middleware/protect";
-import { requireSuperAdmin, requireUser } from "../middleware/auth";
+import { authorize } from "../middleware/auth";
 
 const router = express.Router();
 
@@ -18,21 +18,21 @@ const router = express.Router();
 // ============================
 
 // Top-up wallet (user)
-router.post("/topup", protect, requireUser, topupWallet);
+router.post("/topup", protect, authorize(["User"]), topupWallet);
 
 // Spend wallet (user)
-router.post("/spend", protect, requireUser, spendWallet);
+router.post("/spend", protect, authorize(["User"]), spendWallet);
 
 // Withdraw wallet (user)
-router.post("/withdraw", protect, requireUser, withdrawWallet);
+router.post("/withdraw", protect, authorize(["User"]), withdrawWallet);
 
 // Get wallet with recent transactions (user)
-router.get("/:userId", protect, requireUser, getWallet);
+router.get("/:userId", protect, authorize(["User"]), getWallet);
 
 // Get wallet balance only (user)
-router.get("/balance/:userId", protect, requireUser, getWalletBalance);
+router.get("/balance/:userId", protect, authorize(["User"]), getWalletBalance);
 
-// Get all wallet histories (admin only)
-router.get("/histories/all", protect, requireSuperAdmin, getAllWalletHistories);
+// Get all wallet histories (SuperAdmin only)
+router.get("/histories/all", protect, authorize(["SuperAdmin"]), getAllWalletHistories);
 
 export default router;

@@ -1,46 +1,39 @@
-import { Request, Response, NextFunction } from 'express';
+import { NextFunction, Request, Response } from "express";
 
-// Define roles
-export enum UserRole {
-  USER = 'user',
-  ADMIN = 'admin',
-  SUPERADMIN = 'superadmin'
+type UserRole = "SuperAdmin" | "User";
+
+interface AuthRequest extends Request {
+  user?: { role: string ,_id: string,
+        // Add this required property
+        email?: string,
+        username?: string };
 }
 
-// Higher-order function for role authorization
-export const authorize = (roles: UserRole[]) => (req: Request, res: Response, next: NextFunction) => {
-  if (!req.user || !roles.includes(req.user.role)) {
-    return res.status(403).json({ success: false, message: 'Forbidden' });
-  }
-  next();
-};
+export const authorize = (roles: UserRole[]) => {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied: No user found.",
+      });
+    }
 
-// Specific role middlewares
-export const requireUser = authorize([UserRole.USER]);
-export const requireAdmin = authorize([UserRole.ADMIN, UserRole.SUPERADMIN]);
-export const requireSuperAdmin = authorize([UserRole.SUPERADMIN]);
+    const userRole = req.user.role.toLowerCase();
 
-// Check if user is authenticated and is the same user or admin
-export const requireSameUserOrAdmin = (req: Request, res: Response, next: NextFunction) => {
-  if (!req.user) {
-    return res.status(401).json({
-      success: false,
-      message: 'Not authorized to access this route'
-    });
-  }
+    // SuperAdmin always allowed
+    if (userRole === "superadmin") {
+      return next();
+    }
 
-  // Allow if user is admin or superadmin
-  if (req.user.role === UserRole.ADMIN || req.user.role === UserRole.SUPERADMIN) {
-    return next();
-  }
+    // Check if user's role is in allowed roles (case-insensitive)
+    const allowedRoles = roles.map(r => r.toLowerCase());
+    if (!allowedRoles.includes(userRole)) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied: You do not have the required role.",
+      });
+    }
 
-  // Allow if user is accessing their own resource
-  if (req.user.id === req.params.id) {
-    return next();
-  }
-
-  return res.status(403).json({
-    success: false,
-    message: 'Not authorized to access this resource'
-  });
+    next();
+  };
 };

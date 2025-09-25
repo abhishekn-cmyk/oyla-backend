@@ -6,16 +6,22 @@ import {
   getAllPrivacyPolicies,
 } from "../controllers/privacyController";
 import { protect } from "../middleware/protect";
-import { requireSuperAdmin, requireUser } from "../middleware/auth";
+import { authorize } from "../middleware/auth";
 
 const router = express.Router();
 
-// Admin routes
-router.post("/create",protect,requireSuperAdmin, createPrivacyPolicy);
-router.put("/update/:policyId",protect,requireSuperAdmin, updatePrivacyPolicy);
+// ------------------ SUPERADMIN ROUTES ------------------
+// Create a privacy policy
+router.post("/create", protect, authorize(["SuperAdmin"]), createPrivacyPolicy);
 
-// Public routes
-router.get("/active",protect,requireUser, getActivePrivacyPolicy);
-router.get("/all", protect,requireUser,getAllPrivacyPolicies);
+// Update a privacy policy
+router.put("/update/:policyId", protect, authorize(["SuperAdmin"]), updatePrivacyPolicy);
+
+// ------------------ USER / PUBLIC ROUTES ------------------
+// Get active privacy policy
+router.get("/active", protect, authorize(["User"]), getActivePrivacyPolicy);
+
+// Get all privacy policies
+router.get("/all", protect, authorize(["User"]), getAllPrivacyPolicies);
 
 export default router;

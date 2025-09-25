@@ -8,23 +8,23 @@ import {
 } from "../controllers/LanguageController";
 
 import { protect } from "../middleware/protect";
-import { requireUser, requireAdmin, requireSuperAdmin } from "../middleware/auth";
+import { authorize } from "../middleware/auth";
 
 const router = express.Router();
 
 // ----------------- PUBLIC ROUTES -----------------
-router.get('/', getLanguages);
-router.get('/:id', getLanguageById);
+router.get("/", getLanguages);          // get all languages
+router.get("/:id", getLanguageById);    // get language by ID
 
 // ----------------- PROTECTED ROUTES -----------------
 
 // Only regular users can create a language
-router.post('/', protect, requireUser, createLanguage);
+router.post("/", protect, authorize(["User"]), createLanguage);
 
-// Only regular users can update a language
-router.put('/:id', protect, requireSuperAdmin, updateLanguage);
+// Only SuperAdmin can update a language
+router.put("/:id", protect, authorize(["SuperAdmin"]), updateLanguage);
 
-// Only admin or superadmin can delete a language
-router.delete('/:id', protect, requireSuperAdmin, deleteLanguage);
+// Admin or SuperAdmin can delete a language
+router.delete("/:id", protect, authorize(["SuperAdmin"]), deleteLanguage);
 
 export default router;

@@ -12,11 +12,11 @@ import {
   getProductsByProgram,
   getAvailableProducts,
   getProductsByCategory,
-  getProgramProductsByCategory
+  getProgramProductsByCategory,
 } from "../controllers/ProductController";
 import { upload } from "../middleware/upload";
 import { protect } from "../middleware/protect";
-import { requireSuperAdmin } from "../middleware/auth";
+import { authorize } from "../middleware/auth";
 
 const router = express.Router();
 
@@ -34,24 +34,24 @@ router.get("/program/:programId/category/:category", getProgramProductsByCategor
 // ----------------- PROTECTED ROUTES (SUPERADMIN ONLY) -----------------
 
 // Standalone products
-router.post("/", protect, requireSuperAdmin, upload.single("image"), createProduct); // Create product
-router.put("/:id", protect, requireSuperAdmin, upload.single("image"), updateProduct); // Update product
-router.delete("/:id", protect, requireSuperAdmin, deleteProduct); // Delete product
+router.post("/", protect, authorize(["SuperAdmin"]), upload.single("image"), createProduct);
+router.put("/:id", protect, authorize(["SuperAdmin"]), upload.single("image"), updateProduct);
+router.delete("/:id", protect, authorize(["SuperAdmin"]), deleteProduct);
 
 // Program products
-router.post("/program/:programId", protect, requireSuperAdmin, upload.single("image"), addProgramProduct); // Add product to program
+router.post("/program/:programId", protect, authorize(["SuperAdmin"]), upload.single("image"), addProgramProduct);
 router.put(
   "/program/:programId/product/:productId",
   protect,
-  requireSuperAdmin,
+  authorize(["SuperAdmin"]),
   upload.single("image"),
   updateProgramProduct
-); // Update program product
+);
 router.delete(
   "/program/:programId/product/:productId",
   protect,
-  requireSuperAdmin,
+  authorize(["SuperAdmin"]),
   deleteProgramProduct
-); // Delete program product
+);
 
 export default router;

@@ -5,50 +5,50 @@ import {
   cancelFreeze,
   deleteFreeze,
   getFreezeById,
-  getFreezesByUser
+  getFreezesByUser,
 } from "../controllers/freezeController";
 
 import { protect } from "../middleware/protect";
-import { requireUser, requireSuperAdmin } from "../middleware/auth";
+import { authorize } from "../middleware/auth";
 
 const router = express.Router();
 
 // -------------------- USER ROUTES -------------------- //
 // Add a freeze (user can add for themselves)
-router.post("/:userId", protect, requireUser, addFreeze);
+router.post("/:userId", protect, authorize(["User"]), addFreeze);
 
 // Get all freezes for the logged-in user
-router.get("/:userId", protect, requireUser, getFreezesByUser);
+router.get("/:userId", protect, authorize(["User"]), getFreezesByUser);
 
 // Get a specific freeze by ID for the logged-in user
-router.get("/:userId/:id", protect, requireUser, getFreezeById);
+router.get("/:userId/:id", protect, authorize(["User"]), getFreezeById);
 
 // Update a freeze by ID (user can update their own freeze)
-router.put("/:userId/:id", protect, requireUser, updateFreeze);
+router.put("/:userId/:id", protect, authorize(["User"]), updateFreeze);
 
 // Cancel a freeze (soft update status)
-router.patch("/:userId/:id/cancel", protect, requireUser, cancelFreeze);
+router.patch("/:userId/:id/cancel", protect, authorize(["User"]), cancelFreeze);
 
 // Delete a freeze (user can delete their own freeze)
-router.delete("/:userId/:id", protect, requireUser, deleteFreeze);
+router.delete("/:userId/:id", protect, authorize(["User"]), deleteFreeze);
 
 // -------------------- SUPERADMIN ROUTES -------------------- //
 // Add a freeze for any user
-router.post("/superadmin/:userId", protect, requireSuperAdmin, addFreeze);
+router.post("/superadmin/:userId", protect, authorize(["SuperAdmin"]), addFreeze);
 
 // Get all freezes for any user
-router.get("/superadmin/:userId", protect, requireSuperAdmin, getFreezesByUser);
+router.get("/superadmin/:userId", protect, authorize(["SuperAdmin"]), getFreezesByUser);
 
 // Get a single freeze by ID for any user
-router.get("/superadmin/:userId/:id", protect, requireSuperAdmin, getFreezeById);
+router.get("/superadmin/:userId/:id", protect, authorize(["SuperAdmin"]), getFreezeById);
 
 // Update a freeze for any user
-router.put("/superadmin/:userId/:id", protect, requireSuperAdmin, updateFreeze);
+router.put("/superadmin/:userId/:id", protect, authorize(["SuperAdmin"]), updateFreeze);
 
 // Cancel a freeze for any user
-router.patch("/superadmin/:userId/:id/cancel", protect, requireSuperAdmin, cancelFreeze);
+router.patch("/superadmin/:userId/:id/cancel", protect, authorize(["SuperAdmin"]), cancelFreeze);
 
 // Delete a freeze for any user
-router.delete("/superadmin/:userId/:id", protect, requireSuperAdmin, deleteFreeze);
+router.delete("/superadmin/:userId/:id", protect, authorize(["SuperAdmin"]), deleteFreeze);
 
 export default router;

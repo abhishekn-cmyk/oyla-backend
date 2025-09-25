@@ -36,45 +36,38 @@ export const signup = async (req: Request, res: Response) => {
 // ==================== Login ====================
 
 
+// ==================== Login ====================
 export const login = async (req: Request, res: Response) => {
-  console.log("Login request body:", req.body);
   const { email, password } = req.body;
 
   try {
     const user = await User.findOne({ email });
-    console.log("Found user:", user);
 
-    if (!user) 
-      return res.status(404).json({ message: "User not found" });
-
-    if (!user.password) 
-      return res.status(400).json({ message: "Use social login" });
+    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user.password) return res.status(400).json({ message: "Use social login" });
 
     const isMatch = await comparePassword(password, user.password);
-    console.log("Password match:", isMatch);
-
-    if (!isMatch) 
-      return res.status(400).json({ message: "Invalid password" });
+    if (!isMatch) return res.status(400).json({ message: "Invalid password" });
 
     // Generate JWT token
-    const token = generateToken(user._id, user.role);
+    const token = generateToken(user._id.toString(), user.role);
 
     res.status(200).json({ 
       message: "Login successful", 
       user: {
         id: user._id,
         name: user.username,
-        password:user.password,
         email: user.email,
-        role: user.role
+        role: user.role,
       },
-      token
+      token,
     });
   } catch (err) {
     console.error("Login error:", err);
     res.status(500).json({ error: err });
   }
 };
+
 
 
 // ==================== Send OTP ====================

@@ -1,21 +1,32 @@
 import express from "express";
-import { addToCart,deleteCartItem,getCartByUser,getFullCart,updateCartItem } from "../controllers/CartController";
+import {
+  addToCart,
+  deleteCartItem,
+  getCartByUser,
+  getFullCart,
+  updateCartItem,
+} from "../controllers/CartController";
 
 import { protect } from "../middleware/protect";
-import { requireUser, requireAdmin, requireSuperAdmin } from "../middleware/auth";
-const router=express.Router();
+import { authorize } from "../middleware/auth";
 
+const router = express.Router();
 
+// ------------------ User Routes ------------------
+// Get user's cart
+router.get("/:userId", protect, authorize(["User"]), getCartByUser);
 
-router.get('/:userId', protect,requireUser,getCartByUser);
+// Add item to cart
+router.post("/:productId/:userId/add", protect, authorize(["User"]), addToCart);
 
-router.post('/:productId/:userId/add',protect,requireUser,addToCart);
+// Update item in cart
+router.put("/:productId/:userId/update", protect, authorize(["User"]), updateCartItem);
 
-router.put('/:productId/:userId/update',protect,requireUser,updateCartItem);
+// Delete item from cart
+router.delete("/:productId/:userId/delete", protect, authorize(["User"]), deleteCartItem);
 
-router.delete('/:productId/:userId/delete',protect,requireUser,deleteCartItem);
-
-router.get('/full/cart-details',protect,requireSuperAdmin,getFullCart);
-
+// ------------------ Admin / SuperAdmin Routes ------------------
+// Get full cart details (SuperAdmin only)
+router.get("/full/cart-details", protect, authorize(["SuperAdmin"]), getFullCart);
 
 export default router;

@@ -6,23 +6,26 @@ import {
   updateRestaurant,
   deleteRestaurant,
   addProductToMenu,
-  addProductToPopularMenu
+  addProductToPopularMenu,
 } from "../controllers/restaruntController";
 
-import { requireSuperAdmin } from "../middleware/auth";
-import { requireUser } from "../middleware/auth";
 import { protect } from "../middleware/protect";
+import { authorize } from "../middleware/auth";
 import { upload } from "../middleware/upload";
+
 const router = Router();
 
-router.post("/", protect,requireSuperAdmin,upload.single("image"),createRestaurant);
-router.get("/", getRestaurants);
-router.get("/:id", getRestaurantById);
-router.put("/:id",protect,requireSuperAdmin,upload.single("image"), updateRestaurant);
-router.delete("/:id",protect,requireSuperAdmin,upload.single("image"), deleteRestaurant);
+// ----------------- PUBLIC ROUTES -----------------
+router.get("/", getRestaurants); // Get all restaurants
+router.get("/:id", getRestaurantById); // Get restaurant by ID
 
-// Add products
-router.post("/:restaurantId/menu",protect,requireSuperAdmin,upload.single("image"), addProductToMenu);
-router.post("/:restaurantId/popularMenu",protect,requireSuperAdmin,upload.single("image"), addProductToPopularMenu);
+// ----------------- PROTECTED ROUTES (SUPERADMIN ONLY) -----------------
+router.post("/", protect, authorize(["SuperAdmin"]), upload.single("image"), createRestaurant);
+router.put("/:id", protect, authorize(["SuperAdmin"]), upload.single("image"), updateRestaurant);
+router.delete("/:id", protect, authorize(["SuperAdmin"]), upload.single("image"), deleteRestaurant);
+
+// Add products to restaurant
+router.post("/:restaurantId/menu", protect, authorize(["SuperAdmin"]), upload.single("image"), addProductToMenu);
+router.post("/:restaurantId/popularMenu", protect, authorize(["SuperAdmin"]), upload.single("image"), addProductToPopularMenu);
 
 export default router;

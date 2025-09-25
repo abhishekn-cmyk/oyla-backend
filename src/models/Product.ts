@@ -63,7 +63,7 @@ const ProductSchema = new Schema<IProduct>(
   },
   { timestamps: true }
 );
-ProductSchema.index({ name: "text", description: "text", mealType: 1, category: 1 });
+
 
 export default model<IProduct>("Product", ProductSchema);
 

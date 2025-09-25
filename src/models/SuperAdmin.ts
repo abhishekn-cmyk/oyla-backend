@@ -2,6 +2,7 @@ import mongoose, { Schema, Document } from "mongoose";
 import bcrypt from "bcryptjs";
 
 export interface ISuperAdmin extends Document {
+  _id:string;
   username: string;
   email: string;
   password: string;
@@ -15,10 +16,10 @@ export interface ISuperAdmin extends Document {
 
 const superAdminSchema = new Schema<ISuperAdmin>(
   {
-    username: { type: String, required: true, unique: true },
+    username: { type: String},
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
-    mobileNumber: { type: String, required: true },
+    mobileNumber: { type: String},
     role: { type: String, enum: ["superadmin"], default: "superadmin" },
     profileImage: { type: String },
   },

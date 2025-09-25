@@ -6,24 +6,25 @@ import {
   assignRewardToUser,
   redeemReward,
   deleteReward,
-  getRedeemedRewardsByUser
+  getRedeemedRewardsByUser,
 } from "../controllers/RewardController";
 import { protect } from "../middleware/protect";
-import { requireSuperAdmin, requireUser } from "../middleware/auth";
+import { authorize } from "../middleware/auth";
 
 const router = express.Router();
 
-// ----- Admin Routes -----
-router.post("/create", protect, requireSuperAdmin, createReward);
-router.put("/update/:rewardId", protect, requireSuperAdmin, updateReward);
-router.delete("/delete/:rewardId", protect, requireSuperAdmin, deleteReward);
+// ----- SUPERADMIN ROUTES -----
+router.post("/create", protect, authorize(["SuperAdmin"]), createReward);
+router.put("/update/:rewardId", protect, authorize(["SuperAdmin"]), updateReward);
+router.delete("/delete/:rewardId", protect, authorize(["SuperAdmin"]), deleteReward);
 
 // Admin assigns reward to user
-router.post("/assign/:rewardId/:userId", protect, requireSuperAdmin, assignRewardToUser);
-router.get('/get/reddem/:userId',protect,requireSuperAdmin,getRedeemedRewardsByUser);
+router.post("/assign/:rewardId/:userId", protect, authorize(["SuperAdmin"]), assignRewardToUser);
+router.get("/get/redeem/:userId", protect, authorize(["SuperAdmin"]), getRedeemedRewardsByUser);
 
-// ----- User Routes -----
-router.get("/my", protect, requireUser, getActiveRewards); // User sees their active rewards
-router.post("/redeem/:rewardId", protect, requireUser, redeemReward); // User redeems their reward
+// ----- USER ROUTES -----
+// Use type assertion for routes that need AuthenticatedRequest
+router.get("/my", protect, authorize(["User"]), getActiveRewards as any);
+router.post("/redeem/:rewardId", protect, authorize(["User"]), redeemReward as any);
+
 export default router;
-

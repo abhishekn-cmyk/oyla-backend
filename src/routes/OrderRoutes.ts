@@ -1,20 +1,40 @@
 import express from "express";
-import { getAllOrders,checkout,getOrderById,getOrdersByUser,getOrdersByProduct, deleteOrderById, toggleOrderStatus } from "../controllers/OrderController";
+import {
+  getAllOrders,
+  checkout,
+  getOrderById,
+  getOrdersByUser,
+  getOrdersByProduct,
+  deleteOrderById,
+  toggleOrderStatus,
+} from "../controllers/OrderController";
 import { protect } from "../middleware/protect";
-import { requireUser, requireAdmin, requireSuperAdmin } from "../middleware/auth";
-const router=express.Router();
+import { authorize } from "../middleware/auth";
 
+const router = express.Router();
 
+// ------------------ USER ROUTES ------------------
+// Checkout an order
+router.post("/checkout/:userId", protect, authorize(["User"]), checkout);
 
+// Get orders for a specific user
+router.get("/orders/user/:userId", protect, authorize(["User"]), getOrdersByUser);
 
+// Delete an order by the user
+router.delete("/order/:id", protect, authorize(["User"]), deleteOrderById);
 
-router.post("/checkout/:userId",protect,requireUser, checkout);
-router.get("/orders",protect,requireSuperAdmin, getAllOrders);
-router.get("/orders/user/:userId",protect,requireUser, getOrdersByUser);
+// ------------------ PUBLIC ROUTES ------------------
+// Get order by ID (public)
 router.get("/orders/:orderId", getOrderById);
-router.get("/orders/product/:productId", getOrdersByProduct);
-router.get('/order/:id/delete',protect,requireUser,deleteOrderById);
-router.put('/order/:id/status',protect,requireSuperAdmin,toggleOrderStatus);
 
+// Get orders by product (public)
+router.get("/orders/product/:productId", getOrdersByProduct);
+
+// ------------------ SUPERADMIN ROUTES ------------------
+// Get all orders
+router.get("/orders", protect, authorize(["SuperAdmin"]), getAllOrders);
+
+// Toggle order status
+router.put("/order/:id/status", protect, authorize(["SuperAdmin"]), toggleOrderStatus);
 
 export default router;

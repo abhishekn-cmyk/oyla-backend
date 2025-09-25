@@ -1,6 +1,9 @@
 import { Request, Response } from "express";
 import SuperAdmin from "../models/SuperAdmin";
 import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
+import { ISuperAdmin } from "../models/SuperAdmin";
+import { generateToken } from "../middleware/protect";
 export const registerSuperAdmin = async (req: Request, res: Response) => {
   try {
     const { username, email, password, mobileNumber } = req.body;
@@ -16,29 +19,57 @@ export const registerSuperAdmin = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Server error" });
   }
 };
+const createDefaultSuperAdmin = async () => {
+  try {
+    const defaultEmail = "oyla.admin@gmail.com";
+    const defaultPassword = "oyla123";
+
+    const existingAdmin = await SuperAdmin.findOne({ email: defaultEmail });
+    if (!existingAdmin) {
+      const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+      await new SuperAdmin({ email: defaultEmail, password: hashedPassword }).save();
+      console.log("Default superadmin created in DB.");
+    }
+  } catch (err) {
+    console.error("Error creating default superadmin:", err);
+  }
+};
+
 export const loginSuperAdmin = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
-    // Hardcoded SuperAdmin credentials
-    const SUPERADMIN_EMAIL = "oyla.admin@gmail.com";
-    const SUPERADMIN_PASSWORD = "oyla123";
+    let superAdmin: ISuperAdmin | null = await SuperAdmin.findOne({ email });
 
-    if (email !== SUPERADMIN_EMAIL || password !== SUPERADMIN_PASSWORD) {
+    // If default superadmin does NOT exist, create it
+    if (!superAdmin && email === "oyla.admin@gmail.com") {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      superAdmin = await new SuperAdmin({
+        email,
+        password: hashedPassword,
+        role: "SuperAdmin", // consistent role
+      }).save();
+      console.log("Default superadmin created in DB.");
+    }
+
+    // If still not found, reject login
+    if (!superAdmin) {
       return res.status(400).json({ message: "Invalid email or password" });
     }
 
-    // Generate JWT token
-    const token = jwt.sign(
-      { email: SUPERADMIN_EMAIL, role: "superadmin" },
-      process.env.JWT_SECRET || "secret",
-      { expiresIn: "7d" }
-    );
+   
 
+    // Generate JWT token
+    const token = generateToken(superAdmin._id.toString(), superAdmin.role);
+
+    // Send response
     res.status(200).json({
       message: "Login successful",
       token,
-      superadmin: { email: SUPERADMIN_EMAIL, role: "superadmin" },
+      superadmin: {
+        email: superAdmin.email,
+        role: superAdmin.role,
+      },
     });
   } catch (err) {
     console.error(err);

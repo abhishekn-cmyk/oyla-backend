@@ -7,20 +7,20 @@ import {
 } from "../controllers/ContactusController";
 
 import { protect } from "../middleware/protect";
-import { requireUser, requireAdmin, requireSuperAdmin } from "../middleware/auth";
+import {  authorize } from "../middleware/auth";
 
 const router = express.Router();
 
 // Add a new contact message (accessible to any user or guest)
-router.post("/",protect, requireSuperAdmin,  addContactMessage);
+router.post("/",protect,authorize(["SuperAdmin"]) , addContactMessage);
 
 // Update a contact message (admin only)
-router.put("/:id", protect, requireSuperAdmin, updateContactMessage);
+router.put("/:id", protect, authorize(["SuperAdmin"]) , updateContactMessage);
 
 // Get all contact messages (admin only)
-router.get("/", protect, requireUser, getAllContactMessages);
+router.get("/", protect, authorize(["SuperAdmin"]) , getAllContactMessages);
 
 // Get a single contact message by ID (admin only)
-router.get("/:id", protect, requireUser, getContactMessageById);
+router.get("/:id", protect,authorize(["SuperAdmin"]) , getContactMessageById);
 
 export default router;

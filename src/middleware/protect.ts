@@ -1,66 +1,49 @@
-import { Request, Response, NextFunction } from 'express';
-import jwt, { SignOptions, JwtPayload } from 'jsonwebtoken';
-import User from '../models/User';
-import SuperAdmin from '../models/SuperAdmin';
+import jwt, { JwtPayload } from "jsonwebtoken";
+import { NextFunction, Request, Response } from "express";
+import asyncHandler from "express-async-handler";
+import SuperAdmin from "../models/SuperAdmin";
+import User from "../models/User";
 
-// Extend Express Request type
-declare global {
-  namespace Express {
-    interface Request {
-      user?: any;
-    }
-  }
+const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret_key";
+
+interface AuthRequest extends Request {
+  user?: any;
 }
+export const generateToken = (userId: string, role: string) => { return jwt.sign({ id: userId, role }, JWT_SECRET, { expiresIn: "30d" }); };
+export const protect = asyncHandler(
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const authHeader = req.headers.authorization;
 
-// Middleware to protect routes
-export const protect = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    let token: string | undefined;
-
-    if (req.headers.authorization?.startsWith('Bearer ')) {
-      token = req.headers.authorization.split(' ')[1];
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      res.status(401).json({ success: false, message: "Not authorized, no token" });
+      throw new Error("Not authorized, no token");
     }
 
-    if (!token) {
-      return res.status(401).json({ success: false, message: 'Not authorized' });
+    const token = authHeader.split(" ")[1];
+
+    let decoded: JwtPayload;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    } catch (error) {
+      res.status(401).json({ success: false, message: "Token is invalid" });
+      throw new Error("Token is invalid");
     }
 
-    const secret = process.env.JWT_SECRET;
-    if (!secret) throw new Error('JWT_SECRET is not defined');
-
-    const decoded = jwt.verify(token, secret) as JwtPayload & { role: string };
+    // Make role case-insensitive
+    const role = decoded.role?.toLowerCase();
 
     let user;
-    if (decoded.role === 'superadmin') {
-      user = await SuperAdmin.findById(decoded.sub || decoded.id).select('-password');
-    } else {
-      user = await User.findById(decoded.sub || decoded.id).select('-password');
-    }
-
+    if (role === "user") user = await User.findById(decoded.id);
+    else if (role === "superadmin") user = await SuperAdmin.findById(decoded.id);
+   console.log(user);
     if (!user) {
-      return res.status(401).json({ success: false, message: 'Not authorized' });
+      res.status(401).json({ success: false, message: "User not found" });
+      throw new Error("User not found");
     }
 
     req.user = user;
     next();
-  } catch (error: any) {
-    console.error('Auth middleware error:', error.message || error);
-    res.status(401).json({ success: false, message: 'Not authorized' });
   }
-};
+);
 
-// Generate JWT token
-export const generateToken = (id: string, role: string): string => {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) throw new Error('JWT_SECRET is not defined');
 
-  const payload = { sub: id, role };
-
-  // Ensure expiresIn is correctly typed
-  const expiresIn: `${number}${"s" | "m" | "h" | "d" | "y"}` = 
-    (process.env.JWT_EXPIRE as `${number}${"s" | "m" | "h" | "d" | "y"}`) || '30d';
-
-  const options: SignOptions = { expiresIn };
-
-  return jwt.sign(payload, secret, options);
-};

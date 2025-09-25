@@ -126,8 +126,7 @@ WalletSchema.statics.getWalletWithHistory = function(userId: Types.ObjectId, lim
   ]);
 };
 
-WalletSchema.index({ userId: 1 });
-WalletSchema.index({ balance: 1 });
+
 
 const WalletHistory = model<IWalletHistory>("WalletHistory", WalletHistorySchema);
 const Wallet = model<IWallet, IWalletModel>("Wallet", WalletSchema);

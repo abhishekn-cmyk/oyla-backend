@@ -3,6 +3,16 @@ import mongoose from "mongoose";
 import Reward from "../models/Reward";
 import User from "../models/User";
 
+// Extend the Request type to include user with all required properties
+interface AuthenticatedRequest extends Request {
+  user: {
+    _id: string;
+    role: string; // Add the required role property
+    email?: string;
+    username?: string;
+  };
+}
+
 // Create a new reward
 export const createReward = async (req: Request, res: Response) => {
   try {
@@ -29,7 +39,7 @@ export const updateReward = async (req: Request, res: Response) => {
 };
 
 // Get all active rewards (not expired)
-export const getActiveRewards = async (req: Request, res: Response) => {
+export const getActiveRewards = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user._id; // Logged-in user's ID
     const now = new Date();
@@ -38,7 +48,6 @@ export const getActiveRewards = async (req: Request, res: Response) => {
     const rewards = await Reward.find({
       isActive: true,
       users: userId, 
-      redeemedUsers:userId,// user must be in 'users' array
       $or: [
         { expiryDate: null },         // no expiry
         { expiryDate: { $gte: now } } // not expired
@@ -50,7 +59,6 @@ export const getActiveRewards = async (req: Request, res: Response) => {
     res.status(500).json({ error: err.message || err });
   }
 };
-
 
 // Assign a reward to a user
 export const assignRewardToUser = async (req: Request, res: Response) => {
@@ -79,7 +87,7 @@ export const assignRewardToUser = async (req: Request, res: Response) => {
 };
 
 // Redeem a reward for a user
-export const redeemReward = async (req: Request, res: Response) => {
+export const redeemReward = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { rewardId } = req.params;
     const userId = req.user._id;
@@ -97,7 +105,7 @@ export const redeemReward = async (req: Request, res: Response) => {
 
     if (!reward.redeemedUsers) reward.redeemedUsers = [];
     if (!reward.redeemedUsers.some(u => u.toString() === userId.toString())) {
-      reward.redeemedUsers.push(userId);
+      reward.redeemedUsers.push(new mongoose.Types.ObjectId(userId));
     }
 
     await reward.save();
@@ -107,7 +115,6 @@ export const redeemReward = async (req: Request, res: Response) => {
     res.status(500).json({ error: err.message || err });
   }
 };
-
 
 export const getRedeemedRewardsByUser = async (req: Request, res: Response) => {
   try {
@@ -127,8 +134,6 @@ export const getRedeemedRewardsByUser = async (req: Request, res: Response) => {
     res.status(500).json({ error: err.message || err });
   }
 };
-
-
 
 // Optional: Delete a reward
 export const deleteReward = async (req: Request, res: Response) => {

@@ -13,11 +13,11 @@ import {
   swapMeal,
   freezeSubscription,
   deliverMeal,
-  getAllStats, // ✅ new
+  getAllStats,
 } from "../controllers/subscriptionController";
 
 import { protect } from "../middleware/protect";
-import { requireSuperAdmin, requireUser } from "../middleware/auth";
+import { authorize } from "../middleware/auth";
 
 const router = express.Router();
 
@@ -28,25 +28,26 @@ const router = express.Router();
  */
 
 // User checkout a subscription
-router.post("/:userId/checkout", protect, requireUser, checkoutSubscription);
+router.post("/:userId/checkout", protect, authorize(["User"]), checkoutSubscription);
 
 // User cancel their subscription
-router.patch("/:userId/:subscriptionId/cancel", protect, requireUser, cancelSubscription);
+router.patch("/:userId/:subscriptionId/cancel", protect, authorize(["User"]), cancelSubscription);
 
 // User get their own subscriptions
-router.get("/:userId", protect, requireUser, getSubscriptionsByUser);
+router.get("/:userId", protect, authorize(["User"]), getSubscriptionsByUser);
 
 // User get subscription details
-router.get("/:userId/:subscriptionId", protect, requireUser, getSubscriptionById);
+router.get("/:userId/:subscriptionId", protect, authorize(["User", "SuperAdmin"]), getSubscriptionById);
 
+// Deliver, Freeze, Swap (can be User or SuperAdmin for override/admin purposes)
+router.post("/:subscriptionId/deliver", protect, authorize(["User", "SuperAdmin"]), deliverMeal);
+router.post("/:subscriptionId/freeze", protect, authorize(["User", "SuperAdmin"]), freezeSubscription);
+router.post("/:subscriptionId/swap", protect, authorize(["User", "SuperAdmin"]), swapMeal);
 
-router.post("/:subscriptionId/deliver", protect, requireUser, deliverMeal);
-router.post("/:subscriptionId/freeze", protect, requireUser, freezeSubscription);
-router.post("/:subscriptionId/swap", protect, requireUser, swapMeal);
+// Stats (only SuperAdmin)
+router.get("/:subscriptionId/stats", protect, authorize(["SuperAdmin"]), getSubscriptionStats);
+router.get("/subscription", protect, authorize(["SuperAdmin"]), getAllStats);
 
-// Stats
-router.get("/:subscriptionId/stats", protect, requireSuperAdmin, getSubscriptionStats);
-router.get('/subscription',protect,requireSuperAdmin,getAllStats);
 /**
  * ===========================
  * ADMIN / SUPERADMIN ROUTES
@@ -54,17 +55,16 @@ router.get('/subscription',protect,requireSuperAdmin,getAllStats);
  */
 
 // Admin/SuperAdmin create subscription for a user
-router.post("/:userId", protect, requireSuperAdmin, createSubscription);
+router.post("/:userId", protect, authorize([ "SuperAdmin"]), createSubscription);
 
 // Admin/SuperAdmin update subscription
-router.put("/:userId/:subscriptionId", protect, requireSuperAdmin, updateSubscription);
+router.put("/:userId/:subscriptionId", protect, authorize(["SuperAdmin"]), updateSubscription);
 
 // Admin/SuperAdmin delete subscription
-router.delete("/:userId/:subscriptionId", protect, requireSuperAdmin, deleteSubscription);
+router.delete("/:userId/:subscriptionId", protect, authorize(["SuperAdmin"]), deleteSubscription);
 
 // Admin/SuperAdmin get all subscriptions
-router.get("/", protect, requireSuperAdmin, getAllSubscriptions);
-
+router.get("/", protect, authorize([ "SuperAdmin"]), getAllSubscriptions);
 
 /**
  * ===========================
