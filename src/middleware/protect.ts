@@ -35,7 +35,7 @@ export const protect = asyncHandler(
     let user;
     if (role === "user") user = await User.findById(decoded.id);
     else if (role === "superadmin") user = await SuperAdmin.findById(decoded.id);
-   console.log(user);
+   
     if (!user) {
       res.status(401).json({ success: false, message: "User not found" });
       throw new Error("User not found");

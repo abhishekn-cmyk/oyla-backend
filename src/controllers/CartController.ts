@@ -39,6 +39,11 @@ const updateStock = async (productId: string, prevQuantity: number, newQuantity:
 // ---- Cart controllers ----
 
 // Add product to cart
+
+
+// ---- Cart controllers ----
+
+// Add product to cart
 export const addToCart = async (req: Request, res: Response) => {
   try {
     const { userId, productId } = req.params;
@@ -50,8 +55,8 @@ export const addToCart = async (req: Request, res: Response) => {
     const product = await Product.findById(productId);
     if (!product) return res.status(404).json({ message: "Product not found" });
 
-    // Decrease stock first
-    await decreaseStock(productId, quantity);
+    // Stock operations commented out
+    // await decreaseStock(productId, quantity);
 
     let cart = await Cart.findOne({ userId });
     if (!cart) {
@@ -60,9 +65,8 @@ export const addToCart = async (req: Request, res: Response) => {
       const index = cart.items.findIndex(item => item.product.toString() === productId);
       if (index > -1) {
         // Update quantity in cart
-        const prevQuantity = cart.items[index].quantity;
         cart.items[index].quantity += quantity;
-        await updateStock(productId, prevQuantity, cart.items[index].quantity);
+        // await updateStock(productId, prevQuantity, cart.items[index].quantity);
       } else {
         cart.items.push({ product: new Types.ObjectId(productId), quantity });
       }
@@ -102,12 +106,12 @@ export const updateCartItem = async (req: Request, res: Response) => {
     const prevQuantity = cart.items[index].quantity;
 
     if (quantity <= 0) {
-      // Remove item & increase stock
-      await increaseStock(productId, prevQuantity);
+      // Remove item & restore stock (commented)
+      // await increaseStock(productId, prevQuantity);
       cart.items.splice(index, 1);
     } else {
-      // Update stock accordingly
-      await updateStock(productId, prevQuantity, quantity);
+      // Update quantity (stock logic commented)
+      // await updateStock(productId, prevQuantity, quantity);
       cart.items[index].quantity = quantity;
     }
 
@@ -140,8 +144,8 @@ export const deleteCartItem = async (req: Request, res: Response) => {
 
     const index = cart.items.findIndex(item => item.product.toString() === productId);
     if (index !== -1) {
-      const prevQuantity = cart.items[index].quantity;
-      await increaseStock(productId, prevQuantity); // restore stock
+      // Stock restore commented
+      // await increaseStock(productId, cart.items[index].quantity);
       cart.items.splice(index, 1);
     }
 
@@ -178,46 +182,64 @@ export const getCartByUser = async (req: Request, res: Response) => {
 // Get full cart details (with user, product, restaurant, program)
 export const getFullCart = async (req: Request, res: Response) => {
   try {
+    // Get all carts and populate product references
     const carts = await Cart.find().populate<{ items: { product: any; quantity: number }[] }>("items.product");
 
     const fullCarts = await Promise.all(
-      carts.map(async cart => {
-        const user = await User.findById(cart.userId).select("-password");
+      carts.map(async (cart) => {
+        // Find user
+        const user = await User.findById(cart.userId).select("username email role profileImage");
+        if (!user) return null; // Skip if user not found
 
+        // Process cart items
         const items = await Promise.all(
-          cart.items.map(async item => {
+          cart.items.map(async (item) => {
             const product = item.product;
+            if (!product) return null;
 
+            // Find restaurant containing this product
             const restaurant = await Restaurant.findOne({
               $or: [
-                { "menu._id": product._id },
-                { "popularMenu._id": product._id }
-              ]
-            }).select("name address image");
+                { "menu": product._id },
+                { "popularMenu": product._id },
+              ],
+            }).select("name address image") || null;
 
-            const program = await Program.findOne({ "product._id": product._id }).select("title description");
+            // Find program containing this product
+            const program = await Program.findOne({
+              product: { $in: [product._id] }, // assuming Program has product: ObjectId[]
+            }).select("title description") || null;
 
             return {
               quantity: item.quantity,
               product,
-              restaurant: restaurant || null,
-              program: program || null
+              restaurant,
+              program,
             };
           })
         );
+
+        // Filter null items (in case some product references were invalid)
+        const validItems = items.filter((i) => i !== null);
 
         return {
           user,
           cartId: cart._id,
           totalPrice: cart.totalPrice,
-          items
+          items: validItems,
         };
       })
     );
 
-    res.status(200).json(fullCarts);
+    // Filter null carts (in case user missing)
+    const validCarts = fullCarts.filter((c) => c !== null);
+
+    res.status(200).json(validCarts);
   } catch (err: any) {
-    console.error(err);
-    res.status(500).json({ message: "Error fetching full cart details", error: err.message || err });
+    console.error("Error fetching full cart:", err);
+    res.status(500).json({
+      message: "Error fetching full cart details",
+      error: err.message || err,
+    });
   }
 };

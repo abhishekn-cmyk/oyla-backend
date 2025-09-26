@@ -37,7 +37,14 @@ export const updateReward = async (req: Request, res: Response) => {
     res.status(500).json({ error: err.message || err });
   }
 };
-
+export const getAllRewards = async (req: Request, res: Response) => {
+  try {
+    const rewards = await Reward.find().sort({ createdAt: -1 });
+    res.json(rewards);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
 // Get all active rewards (not expired)
 export const getActiveRewards = async (req: AuthenticatedRequest, res: Response) => {
   try {

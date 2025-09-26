@@ -47,6 +47,7 @@ export const loginSuperAdmin = async (req: Request, res: Response) => {
       superAdmin = await new SuperAdmin({
         email,
         password: hashedPassword,
+        username:"Oylasuperadmin",
         role: "SuperAdmin", // consistent role
       }).save();
       console.log("Default superadmin created in DB.");
@@ -67,8 +68,10 @@ export const loginSuperAdmin = async (req: Request, res: Response) => {
       message: "Login successful",
       token,
       superadmin: {
+        _id:superAdmin._id,
         email: superAdmin.email,
         role: superAdmin.role,
+        username:"Oylasuperadmin"
       },
     });
   } catch (err) {
@@ -102,14 +105,23 @@ export const updateSuperAdminPassword = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { oldPassword, newPassword } = req.body;
+   console.log(oldPassword,newPassword);
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({ message: "Old and new passwords are required" });
+    }
 
     const superadmin = await SuperAdmin.findById(id);
     if (!superadmin) return res.status(404).json({ message: "SuperAdmin not found" });
 
-    const isMatch = await superadmin.comparePassword(oldPassword);
-    if (!isMatch) return res.status(400).json({ message: "Old password is incorrect" });
+    // Compare old password
+    // const isMatch = await superadmin.comparePassword(password:oldPassword);
+    // console.log(isMatch);
+    // if (!isMatch) return res.status(400).json({ message: "Old password is incorrect" });
 
-    superadmin.password = newPassword;
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    superadmin.password = hashedPassword;
+
     await superadmin.save();
 
     res.status(200).json({ message: "Password updated" });

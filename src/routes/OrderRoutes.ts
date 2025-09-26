@@ -7,6 +7,7 @@ import {
   getOrdersByProduct,
   deleteOrderById,
   toggleOrderStatus,
+  getOrderStats
 } from "../controllers/OrderController";
 import { protect } from "../middleware/protect";
 import { authorize } from "../middleware/auth";
@@ -24,10 +25,10 @@ router.get("/orders/user/:userId", protect, authorize(["User"]), getOrdersByUser
 router.delete("/order/:id", protect, authorize(["User"]), deleteOrderById);
 
 // ------------------ PUBLIC ROUTES ------------------
-// Get order by ID (public)
+// Get order by ID
 router.get("/orders/:orderId", getOrderById);
 
-// Get orders by product (public)
+// Get orders by product
 router.get("/orders/product/:productId", getOrdersByProduct);
 
 // ------------------ SUPERADMIN ROUTES ------------------
@@ -35,6 +36,9 @@ router.get("/orders/product/:productId", getOrdersByProduct);
 router.get("/orders", protect, authorize(["SuperAdmin"]), getAllOrders);
 
 // Toggle order status
-router.put("/order/:id/status", protect, authorize(["SuperAdmin"]), toggleOrderStatus);
+router.put("/order/:id/status/update", protect, authorize(["SuperAdmin"]), toggleOrderStatus);
+
+// Get all order statistics
+router.get("/orders/stats/all", protect, authorize(["SuperAdmin"]), getOrderStats);
 
 export default router;

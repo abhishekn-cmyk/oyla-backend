@@ -1,19 +1,15 @@
-import { Schema, model, Document } from "mongoose";
-import { IProduct, ProductModel } from "./Product";
+import { Schema, model, Document, Types } from "mongoose";
 
 export interface IRestaurant extends Document {
   name: string;
   description?: string;
   image?: string;
-  features?: string[];         // e.g., "Free WiFi", "Outdoor Seating"
-  rating?: number;             // overall restaurant rating
-  address?: string;            // restaurant address
-  location?: {                 // geolocation
-    lat: number;
-    lng: number;
-  };
-  menu: IProduct[];            // all menu items
-  popularMenu: IProduct[];     // subset of popular dishes
+  features?: string[];
+  rating?: number;
+  address?: string;
+  location?: { lat: number; lng: number };
+  menu: Types.ObjectId[];        // references to Product
+  popularMenu: Types.ObjectId[]; // references to Product
 }
 
 const RestaurantSchema = new Schema<IRestaurant>(
@@ -28,8 +24,8 @@ const RestaurantSchema = new Schema<IRestaurant>(
       lat: { type: Number },
       lng: { type: Number },
     },
-    menu: [ProductModel],        // nested products/dishes
-    popularMenu: [ProductModel], // popular dishes
+    menu: [{ type: Schema.Types.ObjectId, ref: "Product" }],
+    popularMenu: [{ type: Schema.Types.ObjectId, ref: "Product" }],
   },
   { timestamps: true }
 );

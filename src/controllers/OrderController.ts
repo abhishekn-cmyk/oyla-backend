@@ -186,7 +186,7 @@ export const getOrdersByProduct = async (req: Request, res: Response) => {
 
 export const deleteOrderById = async (req: Request, res: Response) => {
   try {
-    const { orderId } = req.params;
+    const {id: orderId } = req.params;
 
     const order = await Order.findById(orderId);
     if (!order) return res.status(404).json({ message: "Order not found" });
@@ -203,9 +203,8 @@ export const deleteOrderById = async (req: Request, res: Response) => {
 
 export const toggleOrderStatus = async (req: Request, res: Response) => {
   try {
-    const { orderId } = req.params;
-
-    const order = await Order.findById(orderId);
+    const { id } = req.params; // <- match route param name
+    const order = await Order.findById(id);
     if (!order) return res.status(404).json({ message: "Order not found" });
 
     // Example toggle logic using allowed statuses
@@ -234,6 +233,48 @@ export const toggleOrderStatus = async (req: Request, res: Response) => {
   }
 };
 
+
+// Get order statistics
+export const getOrderStats = async (req: Request, res: Response) => {
+  try {
+    // Total orders count
+    const totalOrders = await Order.countDocuments();
+
+    // Count of orders by status
+    const pendingOrders = await Order.countDocuments({ status: "pending" });
+    const completedOrders = await Order.countDocuments({ status: "delivered" });
+
+    // Aggregate total revenue
+    const revenueResult = await Order.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: "$totalPrice" },
+          pendingRevenue: {
+            $sum: { $cond: [{ $eq: ["$status", "pending"] }, "$totalPrice", 0] },
+          },
+          completedRevenue: {
+            $sum: { $cond: [{ $eq: ["$status", "delivered"] }, "$totalPrice", 0] },
+          },
+        },
+      },
+    ]);
+
+    const totals = revenueResult[0] || { totalRevenue: 0, pendingRevenue: 0, completedRevenue: 0 };
+
+    res.status(200).json({
+      totalOrders,
+      pendingOrders,
+      completedOrders,
+      totalRevenue: totals.totalRevenue,
+      pendingRevenue: totals.pendingRevenue,
+      completedRevenue: totals.completedRevenue,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error fetching order stats", error });
+  }
+};
 
 
 

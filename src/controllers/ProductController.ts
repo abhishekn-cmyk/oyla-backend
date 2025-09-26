@@ -3,6 +3,8 @@ import Product, { IProduct } from "../models/Product";
 import Program from "../models/Program";
 import { console } from "inspector";
 
+import Restaurant from "../models/Restaurant";
+
 // ---------- Standalone Product CRUD ----------
 const parseDates = (dates: string | string[] | undefined): Date[] => {
   if (!dates) return [];
@@ -139,6 +141,34 @@ export const updateProduct = async (req: Request, res: Response) => {
 
     const updated = await Product.findByIdAndUpdate(id, updateData, { new: true });
     if (!updated) return res.status(404).json({ message: "Product not found" });
+
+    // ---------------- Update in Restaurants ----------------
+   // ---------------- Update in Restaurants ----------------
+await Restaurant.updateMany(
+  { $or: [{ menu: id }, { popularMenu: id }] },
+  {
+    $set: {
+      "menu.$[m]": updated._id,
+      "popularMenu.$[p]": updated._id,
+    },
+  },
+  {
+    arrayFilters: [{ m: id }, { p: id }],
+  }
+);
+
+// ---------------- Update in Programs ----------------
+      await Program.updateMany(
+        { product: id },
+        {
+          $set: { "product.$[p]": updated._id },
+        },
+        {
+          arrayFilters: [{ p: id }],
+        }
+      );
+
+
     res.status(200).json({ message: "Product updated", product: updated });
   } catch (err) {
     console.error("Error updating product:", err);
@@ -150,13 +180,29 @@ export const updateProduct = async (req: Request, res: Response) => {
 export const deleteProduct = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+
     const deleted = await Product.findByIdAndDelete(id);
     if (!deleted) return res.status(404).json({ message: "Product not found" });
-    res.status(200).json({ message: "Product deleted" });
+
+    // Remove from all Restaurants
+    await Restaurant.updateMany(
+      {},
+      { $pull: { menu: id, popularMenu: id } }
+    );
+
+    // Remove from all Programs
+    await Program.updateMany(
+      {},
+      { $pull: { product: id } }
+    );
+
+    res.status(200).json({ message: "Product deleted and removed from Restaurants/Programs" });
   } catch (err) {
+    console.error("Error deleting product:", err);
     res.status(500).json({ error: err });
   }
 };
+
 
 // Search Product
 export const searchProduct = async (req: Request, res: Response) => {

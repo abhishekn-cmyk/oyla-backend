@@ -6,6 +6,7 @@ import {
   deleteFreeze,
   getFreezeById,
   getFreezesByUser,
+  getAllFreezes,
 } from "../controllers/freezeController";
 
 import { protect } from "../middleware/protect";
@@ -50,5 +51,5 @@ router.patch("/superadmin/:userId/:id/cancel", protect, authorize(["SuperAdmin"]
 
 // Delete a freeze for any user
 router.delete("/superadmin/:userId/:id", protect, authorize(["SuperAdmin"]), deleteFreeze);
-
+router.get('/all/all/full',protect,authorize(["SuperAdmin"]),getAllFreezes);
 export default router;

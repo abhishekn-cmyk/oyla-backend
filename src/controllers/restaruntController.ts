@@ -1,12 +1,11 @@
 import { Request, Response } from "express";
 import Restaurant from "../models/Restaurant";
-import Product, { IProduct } from "../models/Product";
-
+import Product , { IProduct } from "../models/Product";
+import { Types } from "mongoose";
 // -------------------- RESTAURANT CRUD --------------------
 
 // CREATE a restaurant
 export const createRestaurant = async (req: Request, res: Response) => {
-  console.log("createRestaurant called");
   try {
     const data = {
       ...req.body,
@@ -16,7 +15,6 @@ export const createRestaurant = async (req: Request, res: Response) => {
     const restaurant = new Restaurant(data);
     await restaurant.save();
 
-    console.log("New restaurant created:", restaurant);
     res.status(201).json(restaurant);
   } catch (error) {
     console.error("Error creating restaurant:", error);
@@ -47,9 +45,8 @@ export const getRestaurantById = async (req: Request, res: Response) => {
   }
 };
 
-// UPDATE restaurant details
+// UPDATE restaurant
 export const updateRestaurant = async (req: Request, res: Response) => {
-  console.log("updateRestaurant called");
   try {
     const data = {
       ...req.body,
@@ -59,7 +56,6 @@ export const updateRestaurant = async (req: Request, res: Response) => {
     const restaurant = await Restaurant.findByIdAndUpdate(req.params.id, data, { new: true });
     if (!restaurant) return res.status(404).json({ message: "Restaurant not found" });
 
-    console.log("Updated restaurant:", restaurant);
     res.json(restaurant);
   } catch (error) {
     console.error("Error updating restaurant:", error);
@@ -67,7 +63,7 @@ export const updateRestaurant = async (req: Request, res: Response) => {
   }
 };
 
-// DELETE a restaurant
+// DELETE restaurant
 export const deleteRestaurant = async (req: Request, res: Response) => {
   try {
     const restaurant = await Restaurant.findByIdAndDelete(req.params.id);
@@ -81,79 +77,71 @@ export const deleteRestaurant = async (req: Request, res: Response) => {
 
 // -------------------- MENU PRODUCTS --------------------
 
+// Parse product fields safely
 // Helper function to parse product fields
-// Helper function to parse product fields including availableDates and category
-const parseProductFields = (body: any, file?: Express.Multer.File): Partial<IProduct> => {
-  let parsedNutrition, parsedIngredients, parsedMealType, availableDates: Date[] = [];
 
-  if (body.nutrition) parsedNutrition = typeof body.nutrition === "string" ? JSON.parse(body.nutrition) : body.nutrition;
-  if (body.ingredients) parsedIngredients = typeof body.ingredients === "string" ? JSON.parse(body.ingredients) : body.ingredients;
-  if (body.mealType) parsedMealType = typeof body.mealType === "string" ? JSON.parse(body.mealType) : body.mealType;
 
-  // Parse availableDates if provided
-  if (body.availableDates) {
-    try {
-      const parsed = typeof body.availableDates === "string" ? JSON.parse(body.availableDates) : body.availableDates;
-      availableDates = Array.isArray(parsed)
-        ? parsed.map((d: string) => new Date(d)).filter(d => !isNaN(d.getTime()))
-        : [new Date(parsed)].filter(d => !isNaN(d.getTime()));
-    } catch {
-      const singleDate = new Date(body.availableDates);
-      if (!isNaN(singleDate.getTime())) availableDates = [singleDate];
-    }
-  }
+// Add product to menu
+const parseProductFields = (body: any, file?: Express.Multer.File): Partial<IProduct> => ({
+  name: body.name,
+  tagline: body.tagline || "",
+  description: body.description || "",
+  price: Number(body.price) || 0,
+  category: body.category || "main",
+  features: body.features ? body.features.split(",") : [],
+  mealType: body.mealType || "veg",
+  nutrition: body.nutrition ? JSON.parse(body.nutrition) : {},
+  ingredients: body.ingredients ? JSON.parse(body.ingredients) : [],
+  availableDates: body.availableDates ? JSON.parse(body.availableDates) : [],
+  image: file?.path,
+  stock: Number(body.stock) || 0,
+});
 
-  return {
-    ...body,
-    nutrition: parsedNutrition,
-    ingredients: parsedIngredients,
-    mealType: parsedMealType,
-    availableDates,
-    image: file ? file.path : undefined,
-    category: body.category, // Ensure category is added
-  };
-};
-
-// ADD product to restaurant menu
+// Add product to menu
 export const addProductToMenu = async (req: Request, res: Response) => {
-  console.log("addProductToMenu called");
   try {
     const restaurant = await Restaurant.findById(req.params.restaurantId);
     if (!restaurant) return res.status(404).json({ message: "Restaurant not found" });
 
+    // Save product first
     const productData = parseProductFields(req.body, req.file);
     const product = new Product(productData);
+    await product.save();
 
-    restaurant.menu.push(product);
+    // Push product ID only
+    restaurant.menu.push(product._id as Types.ObjectId);
+
+    if (req.body.isPopular) {
+      restaurant.popularMenu.push(product._id as Types.ObjectId);
+    }
+
     await restaurant.save();
 
-    console.log("Added product to menu:", product);
-    res.status(201).json(restaurant);
+    res.status(201).json({ restaurant, product });
   } catch (error) {
     console.error("Error adding product to menu:", error);
     res.status(500).json({ message: "Error adding product to menu", error });
   }
 };
 
-// ADD product to popular menu
+// Add product directly to popular menu
 export const addProductToPopularMenu = async (req: Request, res: Response) => {
-  console.log("addProductToPopularMenu called");
   try {
     const restaurant = await Restaurant.findById(req.params.restaurantId);
     if (!restaurant) return res.status(404).json({ message: "Restaurant not found" });
 
     const productData = parseProductFields(req.body, req.file);
     const product = new Product(productData);
+    await product.save();
 
-    restaurant.popularMenu.push(product);
+    // Only push the product ID
+    restaurant.popularMenu.push(product._id as Types.ObjectId);
+
     await restaurant.save();
 
-    console.log("Added product to popular menu:", product);
-    res.status(201).json(restaurant);
+    res.status(201).json({ restaurant, product });
   } catch (error) {
     console.error("Error adding product to popular menu:", error);
     res.status(500).json({ message: "Error adding product to popular menu", error });
   }
 };
-
-

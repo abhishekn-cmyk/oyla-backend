@@ -124,3 +124,16 @@ export const deleteFreeze = async (req: Request, res: Response) => {
     res.status(500).json({ error: err.message || err });
   }
 };
+// -------------------- GET ALL FREEZES --------------------
+export const getAllFreezes = async (req: Request, res: Response) => {
+  try {
+    const freezes = await Freeze.find()
+      .sort({ freezeDate: -1 }) // latest first
+      .populate("userId")
+      .populate("productId");
+
+    res.status(200).json(freezes);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || err });
+  }
+};

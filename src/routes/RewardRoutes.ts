@@ -7,12 +7,13 @@ import {
   redeemReward,
   deleteReward,
   getRedeemedRewardsByUser,
+  getAllRewards,
 } from "../controllers/RewardController";
 import { protect } from "../middleware/protect";
 import { authorize } from "../middleware/auth";
 
 const router = express.Router();
-
+router.get("/all", protect, authorize(["SuperAdmin"]), getAllRewards);
 // ----- SUPERADMIN ROUTES -----
 router.post("/create", protect, authorize(["SuperAdmin"]), createReward);
 router.put("/update/:rewardId", protect, authorize(["SuperAdmin"]), updateReward);

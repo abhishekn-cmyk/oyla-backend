@@ -4,6 +4,7 @@ import {
   updatePrivacyPolicy,
   getActivePrivacyPolicy,
   getAllPrivacyPolicies,
+  deletePrivacyPolicy,
 } from "../controllers/privacyController";
 import { protect } from "../middleware/protect";
 import { authorize } from "../middleware/auth";
@@ -22,6 +23,9 @@ router.put("/update/:policyId", protect, authorize(["SuperAdmin"]), updatePrivac
 router.get("/active", protect, authorize(["User"]), getActivePrivacyPolicy);
 
 // Get all privacy policies
-router.get("/all", protect, authorize(["User"]), getAllPrivacyPolicies);
+router.get("/all", getAllPrivacyPolicies);
+// Delete a privacy policy
+router.delete("/delete/:policyId", protect, authorize(["SuperAdmin"]), deletePrivacyPolicy);
+
 
 export default router;

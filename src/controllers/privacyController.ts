@@ -65,3 +65,18 @@ export const getAllPrivacyPolicies = async (req: Request, res: Response) => {
     res.status(500).json({ error: err.message || err });
   }
 };
+
+
+export const deletePrivacyPolicy = async (req: Request, res: Response) => {
+  try {
+    const { policyId } = req.params;
+    const policy = await PrivacyPolicy.findById(policyId);
+    if (!policy) return res.status(404).json({ message: "Policy not found" });
+
+    await policy.deleteOne();
+    res.status(200).json({ message: "Policy deleted successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};

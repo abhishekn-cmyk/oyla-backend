@@ -37,7 +37,6 @@ const FreezeSchema = new Schema<IFreeze>(
   { timestamps: true }
 );
 
-// Compound index: one freeze per user per product per date
 
 const Freeze = model<IFreeze>('Freeze', FreezeSchema);
 export default Freeze;

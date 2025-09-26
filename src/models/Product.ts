@@ -31,7 +31,8 @@ const ProductSchema = new Schema<IProduct>(
     image: { type: String },
     rating: { type: Number, default: 0 },
     stock: { type: Number, default: 0 },
-    features: { type: String },
+   features: [{ type: String }], 
+
     nutrition: {
       fat: { type: String },
       carbohydrate: { type: String },
