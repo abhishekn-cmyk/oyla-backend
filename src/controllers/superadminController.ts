@@ -48,7 +48,7 @@ export const loginSuperAdmin = async (req: Request, res: Response) => {
         email,
         password: hashedPassword,
         username:"Oylasuperadmin",
-        role: "SuperAdmin", // consistent role
+        role: "superadmin", // consistent role
       }).save();
       console.log("Default superadmin created in DB.");
     }
