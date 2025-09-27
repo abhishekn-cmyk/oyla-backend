@@ -2,7 +2,7 @@
   "name": "oyls",
   "version": "1.0.0",
   "main": "index.js",
- "scripts": {
+"scripts": {
   "build": "tsc",
   "start": "node dist/server.js",
   "dev": "nodemon --watch src --ext ts,json --exec ts-node src/server.ts"
