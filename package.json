@@ -2,10 +2,11 @@
   "name": "oyls",
   "version": "1.0.0",
   "main": "index.js",
-  "scripts": {
-    "start": "node dist/server.js",
-    "dev": "nodemon --watch src --ext ts,json --exec ts-node src/server.ts"
-  },
+ "scripts": {
+  "build": "tsc",
+  "start": "node dist/server.js",
+  "dev": "nodemon --watch src --ext ts,json --exec ts-node src/server.ts"
+},
   "keywords": [],
   "author": "",
   "license": "ISC",
