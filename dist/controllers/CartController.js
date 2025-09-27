@@ -1,0 +1,231 @@
+"use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getFullCart = exports.getCartByUser = exports.deleteCartItem = exports.updateCartItem = exports.addToCart = void 0;
+const mongoose_1 = require("mongoose");
+const Cart_1 = __importDefault(require("../models/Cart"));
+const Product_1 = __importDefault(require("../models/Product"));
+const User_1 = __importDefault(require("../models/User"));
+const Restaurant_1 = __importDefault(require("../models/Restaurant"));
+const Program_1 = __importDefault(require("../models/Program"));
+// ---- Stock utilities ----
+const decreaseStock = (productId, quantity) => __awaiter(void 0, void 0, void 0, function* () {
+    const product = yield Product_1.default.findById(productId);
+    if (!product)
+        throw new Error("Product not found");
+    if (product.stock < quantity)
+        throw new Error("Insufficient stock");
+    product.stock -= quantity;
+    yield product.save();
+    return product;
+});
+const increaseStock = (productId, quantity) => __awaiter(void 0, void 0, void 0, function* () {
+    const product = yield Product_1.default.findById(productId);
+    if (!product)
+        throw new Error("Product not found");
+    product.stock += quantity;
+    yield product.save();
+    return product;
+});
+const updateStock = (productId, prevQuantity, newQuantity) => __awaiter(void 0, void 0, void 0, function* () {
+    const product = yield Product_1.default.findById(productId);
+    if (!product)
+        throw new Error("Product not found");
+    const diff = newQuantity - prevQuantity; // positive -> decrease, negative -> increase
+    if (diff > 0 && product.stock < diff)
+        throw new Error("Insufficient stock");
+    product.stock -= diff; // if diff < 0, stock increases
+    yield product.save();
+    return product;
+});
+// ---- Cart controllers ----
+// Add product to cart
+// ---- Cart controllers ----
+// Add product to cart
+const addToCart = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { userId, productId } = req.params;
+        const { quantity = 1 } = req.body;
+        const user = yield User_1.default.findById(userId);
+        if (!user)
+            return res.status(404).json({ message: "User not found" });
+        const product = yield Product_1.default.findById(productId);
+        if (!product)
+            return res.status(404).json({ message: "Product not found" });
+        // Stock operations commented out
+        // await decreaseStock(productId, quantity);
+        let cart = yield Cart_1.default.findOne({ userId });
+        if (!cart) {
+            cart = new Cart_1.default({ userId, items: [{ product: new mongoose_1.Types.ObjectId(productId), quantity }] });
+        }
+        else {
+            const index = cart.items.findIndex(item => item.product.toString() === productId);
+            if (index > -1) {
+                // Update quantity in cart
+                cart.items[index].quantity += quantity;
+                // await updateStock(productId, prevQuantity, cart.items[index].quantity);
+            }
+            else {
+                cart.items.push({ product: new mongoose_1.Types.ObjectId(productId), quantity });
+            }
+        }
+        yield cart.populate("items.product");
+        cart.totalPrice = cart.items.reduce((acc, item) => acc + item.quantity * item.product.price, 0);
+        yield cart.save();
+        res.status(200).json(cart);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message || err });
+    }
+});
+exports.addToCart = addToCart;
+// Update cart item quantity
+const updateCartItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { userId, productId } = req.params;
+        const { quantity } = req.body;
+        const user = yield User_1.default.findById(userId);
+        if (!user)
+            return res.status(404).json({ message: "User not found" });
+        const product = yield Product_1.default.findById(productId);
+        if (!product)
+            return res.status(404).json({ message: "Product not found" });
+        const cart = yield Cart_1.default.findOne({ userId });
+        if (!cart)
+            return res.status(404).json({ message: "Cart not found" });
+        const index = cart.items.findIndex(item => item.product.toString() === productId);
+        if (index === -1)
+            return res.status(404).json({ message: "Product not in cart" });
+        const prevQuantity = cart.items[index].quantity;
+        if (quantity <= 0) {
+            // Remove item & restore stock (commented)
+            // await increaseStock(productId, prevQuantity);
+            cart.items.splice(index, 1);
+        }
+        else {
+            // Update quantity (stock logic commented)
+            // await updateStock(productId, prevQuantity, quantity);
+            cart.items[index].quantity = quantity;
+        }
+        yield cart.populate("items.product");
+        cart.totalPrice = cart.items.reduce((acc, item) => acc + item.quantity * item.product.price, 0);
+        yield cart.save();
+        res.status(200).json(cart);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message || err });
+    }
+});
+exports.updateCartItem = updateCartItem;
+// Delete product from cart
+const deleteCartItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { userId, productId } = req.params;
+        const user = yield User_1.default.findById(userId);
+        if (!user)
+            return res.status(404).json({ message: "User not found" });
+        const product = yield Product_1.default.findById(productId);
+        if (!product)
+            return res.status(404).json({ message: "Product not found" });
+        const cart = yield Cart_1.default.findOne({ userId });
+        if (!cart)
+            return res.status(404).json({ message: "Cart not found" });
+        const index = cart.items.findIndex(item => item.product.toString() === productId);
+        if (index !== -1) {
+            // Stock restore commented
+            // await increaseStock(productId, cart.items[index].quantity);
+            cart.items.splice(index, 1);
+        }
+        yield cart.populate("items.product");
+        cart.totalPrice = cart.items.reduce((acc, item) => acc + item.quantity * item.product.price, 0);
+        yield cart.save();
+        res.status(200).json(cart);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message || err });
+    }
+});
+exports.deleteCartItem = deleteCartItem;
+// Get cart by user
+const getCartByUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { userId } = req.params;
+        const user = yield User_1.default.findById(userId);
+        if (!user)
+            return res.status(404).json({ message: "User not found" });
+        const cart = yield Cart_1.default.findOne({ userId }).populate("items.product");
+        if (!cart)
+            return res.status(404).json({ message: "Cart not found" });
+        res.status(200).json(cart);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message || err });
+    }
+});
+exports.getCartByUser = getCartByUser;
+// Get full cart details (with user, product, restaurant, program)
+const getFullCart = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        // Get all carts and populate product references
+        const carts = yield Cart_1.default.find().populate("items.product");
+        const fullCarts = yield Promise.all(carts.map((cart) => __awaiter(void 0, void 0, void 0, function* () {
+            // Find user
+            const user = yield User_1.default.findById(cart.userId).select("username email role profileImage");
+            if (!user)
+                return null; // Skip if user not found
+            // Process cart items
+            const items = yield Promise.all(cart.items.map((item) => __awaiter(void 0, void 0, void 0, function* () {
+                const product = item.product;
+                if (!product)
+                    return null;
+                // Find restaurant containing this product
+                const restaurant = (yield Restaurant_1.default.findOne({
+                    $or: [
+                        { "menu": product._id },
+                        { "popularMenu": product._id },
+                    ],
+                }).select("name address image")) || null;
+                // Find program containing this product
+                const program = (yield Program_1.default.findOne({
+                    product: { $in: [product._id] }, // assuming Program has product: ObjectId[]
+                }).select("title description")) || null;
+                return {
+                    quantity: item.quantity,
+                    product,
+                    restaurant,
+                    program,
+                };
+            })));
+            // Filter null items (in case some product references were invalid)
+            const validItems = items.filter((i) => i !== null);
+            return {
+                user,
+                cartId: cart._id,
+                totalPrice: cart.totalPrice,
+                items: validItems,
+            };
+        })));
+        // Filter null carts (in case user missing)
+        const validCarts = fullCarts.filter((c) => c !== null);
+        res.status(200).json(validCarts);
+    }
+    catch (err) {
+        console.error("Error fetching full cart:", err);
+        res.status(500).json({
+            message: "Error fetching full cart details",
+            error: err.message || err,
+        });
+    }
+});
+exports.getFullCart = getFullCart;

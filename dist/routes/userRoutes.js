@@ -1,0 +1,16 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const authController_1 = require("../controllers/authController");
+const upload_1 = require("../middleware/upload");
+const router = (0, express_1.Router)();
+router.post("/signup", authController_1.signup);
+router.post("/login", authController_1.login);
+router.post("/send-otp", authController_1.sendOtp);
+router.post("/verify-otp", authController_1.verifyOtp);
+router.post("/social-login", authController_1.socialLogin);
+router.put("/update-profile", upload_1.upload.single("profileImage"), authController_1.updateProfile);
+router.post('/post-profile', upload_1.upload.single("profileImage"), authController_1.PostProfile);
+router.get('/users', authController_1.getAllUsers);
+router.get('/user/:id', authController_1.getUserById);
+exports.default = router;
