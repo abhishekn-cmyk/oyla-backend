@@ -1,30 +1,24 @@
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Schema, Document, InferSchemaType } from "mongoose";
 import bcrypt from "bcryptjs";
 
-export interface ISuperAdmin extends Document {
-  _id:string;
-  username: string;
-  email: string;
-  password: string;
-  mobileNumber: string;
-  role: "superadmin";
-  profileImage?: string;
-  createdAt: Date;
-  updatedAt: Date;
-  comparePassword(candidatePassword: string): Promise<boolean>;
-}
-
-const superAdminSchema = new Schema<ISuperAdmin>(
+const superAdminSchema = new Schema(
   {
-    username: { type: String},
+    username: { type: String },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
-    mobileNumber: { type: String},
+    mobileNumber: { type: String },
     role: { type: String, enum: ["superadmin"], default: "superadmin" },
     profileImage: { type: String },
   },
   { timestamps: true }
 );
+
+// 🔑 Infer TypeScript type from schema
+export type ISuperAdmin = InferSchemaType<typeof superAdminSchema> &
+  Document & {
+    _id: mongoose.Types.ObjectId;
+    comparePassword(candidatePassword: string): Promise<boolean>;
+  };
 
 // Hash password before saving
 superAdminSchema.pre("save", async function (next) {
@@ -41,5 +35,6 @@ superAdminSchema.methods.comparePassword = async function (
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-const SuperAdmin = mongoose.model<ISuperAdmin>("SuperAdmin", superAdminSchema);
+// ✅ Cast through unknown to avoid TS complaints
+const SuperAdmin = mongoose.model("SuperAdmin", superAdminSchema) as unknown as mongoose.Model<ISuperAdmin>;
 export default SuperAdmin;

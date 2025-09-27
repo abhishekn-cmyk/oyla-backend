@@ -23,19 +23,19 @@ export interface IUser extends Document {
   updatedAt: Date;
 }
 
-const UserSchema = new Schema<IUser>(
+const UserSchema = new Schema(
   {
     email: { type: String, required: true, unique: true },
     password: { type: String },
     googleId: { type: String },
-    username:{type:String},
+    username: { type: String },
     facebookId: { type: String },
     otpCode: { type: String },
     role: { type: String, enum: ["user"], default: "user" },
     isVerified: { type: Boolean, default: false },
     profile: {
       firstName: { type: String },
-      lastName: { type: String},
+      lastName: { type: String },
       dob: { type: Date },
       gender: { type: String, enum: ["male", "female", "other"] },
       address: { type: String },
@@ -47,4 +47,5 @@ const UserSchema = new Schema<IUser>(
   { timestamps: true }
 );
 
-export default model<IUser>("User", UserSchema);
+
+export default model("User", UserSchema); // Remove <IUser>
