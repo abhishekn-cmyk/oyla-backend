@@ -15,22 +15,22 @@ const router = express.Router();
 
 // ------------------ Admin / SuperAdmin Routes ------------------
 // Create a carousel slide (SuperAdmin only)
-router.post("/", protect, authorize(["SuperAdmin"]), upload.single('image'), createCarousel);
+router.post("/", protect, authorize(["superadmin"]), upload.single('image'), createCarousel);
 
 // Update a carousel slide by ID (SuperAdmin only)
-router.put("/:id", protect, authorize(["SuperAdmin"]), upload.single('image'), updateCarousel);
+router.put("/:id", protect, authorize(["superadmin"]), upload.single('image'), updateCarousel);
 
 // Delete a carousel slide by ID (SuperAdmin only)
-router.delete("/:id", protect, authorize(["SuperAdmin"]), deleteCarousel);
+router.delete("/:id", protect, authorize(["superadmin"]), deleteCarousel);
 
 // ------------------ Public / User Routes ------------------
 // Get all active carousel slides (for users)
 router.get("/active", getActiveCarousels);
 
 // Get all carousel slides (SuperAdmin only)
-router.get("/", protect, authorize(["SuperAdmin"]), getAllCarousels);
+router.get("/", protect, authorize(["superadmin"]), getAllCarousels);
 
 // Get a carousel slide by ID (SuperAdmin only)
-router.get("/:id", protect, authorize(["SuperAdmin"]), getCarouselById);
+router.get("/:id", protect, authorize(["superadmin"]), getCarouselById);
 
 export default router;

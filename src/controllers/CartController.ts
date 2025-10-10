@@ -1,86 +1,92 @@
 import { Request, Response } from "express";
 import { Types } from "mongoose";
 import Cart from "../models/Cart";
-import Product, { IProduct } from "../models/Product";
+import ProductModel, { IProduct } from "../models/Product";
 import User from "../models/User";
 import Restaurant from "../models/Restaurant";
 import Program from "../models/Program";
+import { io } from "../server";
+import { createUserNotification } from "./createusernotification";
 
-// ---- Stock utilities ----
-const decreaseStock = async (productId: string, quantity: number) => {
-  const product = await Product.findById(productId);
-  if (!product) throw new Error("Product not found");
-  if (product.stock < quantity) throw new Error("Insufficient stock");
-  product.stock -= quantity;
-  await product.save();
-  return product;
-};
-
-const increaseStock = async (productId: string, quantity: number) => {
-  const product = await Product.findById(productId);
-  if (!product) throw new Error("Product not found");
-  product.stock += quantity;
-  await product.save();
-  return product;
-};
-
-const updateStock = async (productId: string, prevQuantity: number, newQuantity: number) => {
-  const product = await Product.findById(productId);
-  if (!product) throw new Error("Product not found");
-
-  const diff = newQuantity - prevQuantity; // positive -> decrease, negative -> increase
-  if (diff > 0 && product.stock < diff) throw new Error("Insufficient stock");
-
-  product.stock -= diff; // if diff < 0, stock increases
-  await product.save();
-  return product;
-};
-
-// ---- Cart controllers ----
-
-// Add product to cart
+const calculateTotal = (items: { product: IProduct; quantity: number }[]) =>
+  items.reduce((acc, item) => acc + item.quantity * (item.product?.costPrice || 0), 0);
 
 
-// ---- Cart controllers ----
+// -------------------- Cart Controllers --------------------
 
 // Add product to cart
 export const addToCart = async (req: Request, res: Response) => {
   try {
     const { userId, productId } = req.params;
     const { quantity = 1 } = req.body;
+    const qty = Number(quantity) || 1;
 
+    // Find user
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    const product = await Product.findById(productId);
+    // Find product
+    const product = await ProductModel.findById(productId);
     if (!product) return res.status(404).json({ message: "Product not found" });
 
-    // Stock operations commented out
-    // await decreaseStock(productId, quantity);
+    // Find associated restaurant
+        const restaurant = await Restaurant.findOne({
+        $or: [
+          { menu: { $in: [product._id] } },
+          { popularMenu: { $in: [product._id] } }
+        ]
+      });
 
+      // Find associated program
+      const program = await Program.findOne({
+        product: { $in: [product._id] }
+      });
+    // Find or create cart
     let cart = await Cart.findOne({ userId });
     if (!cart) {
-      cart = new Cart({ userId, items: [{ product: new Types.ObjectId(productId), quantity }] });
+      cart = new Cart({ userId, items: [{ product: product._id, quantity: qty }] });
     } else {
       const index = cart.items.findIndex(item => item.product.toString() === productId);
-      if (index > -1) {
-        // Update quantity in cart
-        cart.items[index].quantity += quantity;
-        // await updateStock(productId, prevQuantity, cart.items[index].quantity);
-      } else {
-        cart.items.push({ product: new Types.ObjectId(productId), quantity });
-      }
+      if (index > -1) cart.items[index].quantity += qty;
+      else cart.items.push({ product: product._id as Types.ObjectId, quantity: qty });
     }
 
+    // Populate product details
     await cart.populate<{ items: { product: IProduct; quantity: number }[] }>("items.product");
-    cart.totalPrice = cart.items.reduce(
-      (acc, item) => acc + item.quantity * (item.product as IProduct).price,
-      0
-    );
 
+    // Calculate total price
+    cart.totalPrice = calculateTotal(cart.items as { product: IProduct; quantity: number }[]);
+
+    // Save cart
     await cart.save();
-    res.status(200).json(cart);
+
+    // Prepare notification metadata
+    const metadata: any = { cartId: cart._id, productId };
+    
+    if (restaurant) metadata.restaurantId = restaurant._id;
+    
+    if (program) metadata.programId = program._id;
+
+    // Create user notification
+    await createUserNotification({
+      userId,
+      title: "Cart Updated",
+      message: `Added ${qty} x ${product.name} to your cart.`,
+      type: "cart",
+      targetAudience: "user",
+      createdBy: "system",
+      channel: "inApp",
+      metadata,
+    });
+
+    // Prepare response data with restaurant and program if available
+    const responseData: any = { ...cart.toObject() };
+    if (restaurant) responseData.restaurant = restaurant;
+    if (program) responseData.program = program;
+
+    res.status(200).json(responseData);
   } catch (err: any) {
+    console.error(err);
     res.status(500).json({ error: err.message || err });
   }
 };
@@ -90,74 +96,123 @@ export const updateCartItem = async (req: Request, res: Response) => {
   try {
     const { userId, productId } = req.params;
     const { quantity } = req.body;
+    const qty = Number(quantity);
 
+    if (isNaN(qty)) {
+      return res.status(400).json({ message: "Quantity must be a number" });
+    }
+
+    // Check user
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    const product = await Product.findById(productId);
-    if (!product) return res.status(404).json({ message: "Product not found" });
-
+    // Find cart
     const cart = await Cart.findOne({ userId });
+    console.log(cart);
     if (!cart) return res.status(404).json({ message: "Cart not found" });
 
+    // Find product index in cart
     const index = cart.items.findIndex(item => item.product.toString() === productId);
-    if (index === -1) return res.status(404).json({ message: "Product not in cart" });
-
-    const prevQuantity = cart.items[index].quantity;
-
-    if (quantity <= 0) {
-      // Remove item & restore stock (commented)
-      // await increaseStock(productId, prevQuantity);
-      cart.items.splice(index, 1);
-    } else {
-      // Update quantity (stock logic commented)
-      // await updateStock(productId, prevQuantity, quantity);
-      cart.items[index].quantity = quantity;
+    console.log(index);
+    if (index === -1) {
+      return res.status(404).json({ message: "Product not in cart" });
     }
 
+    // Populate product details before updating/removing
     await cart.populate<{ items: { product: IProduct; quantity: number }[] }>("items.product");
-    cart.totalPrice = cart.items.reduce(
-      (acc, item) => acc + item.quantity * (item.product as IProduct).price,
-      0
-    );
+    const product = cart.items[index].product as IProduct;
+    console.log(product);
+    // Update or remove item
+    if (qty <= 0) {
+      cart.items.splice(index, 1);
+    } else {
+      cart.items[index].quantity = qty;
+    }
 
+    // Recalculate total
+    cart.totalPrice = calculateTotal(cart.items as { product: IProduct; quantity: number }[]);
+    console.log(cart);
     await cart.save();
-    res.status(200).json(cart);
+
+    // 🔍 Find associated restaurant & program for metadata
+    const restaurant = await Restaurant.findOne({
+      $or: [
+        { menu: { $in: [product._id] } },
+        { popularMenu: { $in: [product._id] } }
+      ]
+    });
+
+    const program = await Program.findOne({
+      product: { $in: [product._id] }
+    });
+
+    // Build notification metadata
+    const metadata: any = { cartId: cart._id, productId };
+    if (restaurant) metadata.restaurantId = restaurant._id;
+    if (program) metadata.programId = program._id;
+
+    // Send notification
+    if (product) {
+      await createUserNotification({
+        userId,
+        title: "Cart Updated",
+        message: qty <= 0
+          ? `Removed ${product.name} from your cart.`
+          : `Updated ${product.name} quantity to ${qty}.`,
+        type: "cart",
+        targetAudience: "user",
+        createdBy: "system",
+        channel: "inApp",
+        metadata,
+      });
+    }
+
+    // Build response with restaurant & program if available
+    const responseData: any = { ...cart.toObject() };
+    if (restaurant) responseData.restaurant = restaurant;
+    if (program) responseData.program = program;
+
+    res.status(200).json(responseData);
   } catch (err: any) {
+    console.error(err);
     res.status(500).json({ error: err.message || err });
   }
 };
 
-// Delete product from cart
+
+// Delete cart item
 export const deleteCartItem = async (req: Request, res: Response) => {
   try {
     const { userId, productId } = req.params;
 
-    const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    const product = await Product.findById(productId);
-    if (!product) return res.status(404).json({ message: "Product not found" });
-
     const cart = await Cart.findOne({ userId });
     if (!cart) return res.status(404).json({ message: "Cart not found" });
 
-    const index = cart.items.findIndex(item => item.product.toString() === productId);
-    if (index !== -1) {
-      // Stock restore commented
-      // await increaseStock(productId, cart.items[index].quantity);
-      cart.items.splice(index, 1);
+    await cart.populate<{ items: { product: IProduct; quantity: number }[] }>("items.product");
+    const index = cart.items.findIndex(item => item.product.id.toString() === productId);
+    const productName = cart.items[index]?.product?._id;
+
+    if (index !== -1) cart.items.splice(index, 1);
+
+    cart.totalPrice = calculateTotal(cart.items as { product: IProduct; quantity: number }[]);
+    await cart.save();
+
+    if (productName) {
+      await createUserNotification({
+        userId,
+        title: "Cart Updated",
+        message: `Removed ${productName} from your cart.`,
+        type: "cart",
+        targetAudience: "user",
+        createdBy: "system",
+        channel: "inApp",
+        metadata: { cartId: cart._id, productId },
+      });
     }
 
-    await cart.populate<{ items: { product: IProduct; quantity: number }[] }>("items.product");
-    cart.totalPrice = cart.items.reduce(
-      (acc, item) => acc + item.quantity * (item.product as IProduct).price,
-      0
-    );
-
-    await cart.save();
     res.status(200).json(cart);
   } catch (err: any) {
+    console.error(err);
     res.status(500).json({ error: err.message || err });
   }
 };
@@ -167,79 +222,112 @@ export const getCartByUser = async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
 
-    const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ message: "User not found" });
+    // Find cart and populate products
+    const cart = await Cart.findOne({ userId })
+      .populate<{ items: { product: IProduct; quantity: number }[] }>("items.product");
 
-    const cart = await Cart.findOne({ userId }).populate<{ items: { product: IProduct; quantity: number }[] }>("items.product");
-    if (!cart) return res.status(404).json({ message: "Cart not found" });
+    if (!cart) {
+      return res.status(404).json({ message: "Cart not found" });
+    }
 
-    res.status(200).json(cart);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || err });
-  }
-};
+    // Build enriched items with restaurant & program details
+    const enrichedItems = await Promise.all(
+      cart.items.map(async (item) => {
+        const product = item.product as IProduct;
 
-// Get full cart details (with user, product, restaurant, program)
-export const getFullCart = async (req: Request, res: Response) => {
-  try {
-    // Get all carts and populate product references
-    const carts = await Cart.find().populate<{ items: { product: any; quantity: number }[] }>("items.product");
+        // 🔍 Find associated restaurant
+        const restaurant = await Restaurant.findOne({
+          $or: [
+            { menu: { $elemMatch: { id: product._id } } },
+            { popularMenu: { $elemMatch: { id: product._id } } }
+          ]
+        });
 
-    const fullCarts = await Promise.all(
-      carts.map(async (cart) => {
-        // Find user
-        const user = await User.findById(cart.userId).select("username email role profileImage");
-        if (!user) return null; // Skip if user not found
-
-        // Process cart items
-        const items = await Promise.all(
-          cart.items.map(async (item) => {
-            const product = item.product;
-            if (!product) return null;
-
-            // Find restaurant containing this product
-            const restaurant = await Restaurant.findOne({
-              $or: [
-                { "menu": product._id },
-                { "popularMenu": product._id },
-              ],
-            }).select("name address image") || null;
-
-            // Find program containing this product
-            const program = await Program.findOne({
-              product: { $in: [product._id] }, // assuming Program has product: ObjectId[]
-            }).select("title description") || null;
-
-            return {
-              quantity: item.quantity,
-              product,
-              restaurant,
-              program,
-            };
-          })
-        );
-
-        // Filter null items (in case some product references were invalid)
-        const validItems = items.filter((i) => i !== null);
+        // 🔍 Find associated program
+        const program = await Program.findOne({
+          product: { $elemMatch: { id: product._id } }
+        });
 
         return {
-          user,
-          cartId: cart._id,
-          totalPrice: cart.totalPrice,
-          items: validItems,
+          ...item,
+          restaurant: restaurant || null,
+          program: program || null,
         };
       })
     );
 
-    // Filter null carts (in case user missing)
-    const validCarts = fullCarts.filter((c) => c !== null);
+    // Final response
+    const responseData = {
+      ...cart.toObject(),
+      items: enrichedItems,
+    };
 
-    res.status(200).json(validCarts);
+    res.status(200).json(responseData);
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ error: err.message || err });
+  }
+};
+
+// Optimized getFullCart
+export const getFullCart = async (_req: Request, res: Response) => {
+  try {
+    const carts = await Cart.aggregate([
+      { $lookup: { from: "users", localField: "userId", foreignField: "_id", as: "user" } },
+      { $unwind: "$user" },
+      { $unwind: "$items" },
+      { $lookup: { from: "products", localField: "items.product", foreignField: "_id", as: "items.product" } },
+      { $unwind: "$items.product" },
+      {
+        $lookup: {
+          from: "restaurants",
+          let: { productId: "$items.product._id" },
+          pipeline: [
+            { $match: { $expr: { $or: [{ $in: ["$$productId", "$menu"] }, { $in: ["$$productId", "$popularMenu"] }] } } },
+            { $project: { name: 1, address: 1, image: 1 } },
+          ],
+          as: "items.restaurant",
+        },
+      },
+      { $addFields: { "items.restaurant": { $arrayElemAt: ["$items.restaurant", 0] } } },
+      {
+        $lookup: {
+          from: "programs",
+          let: { productId: "$items.product._id" },
+          pipeline: [
+            { $match: { $expr: { $in: ["$$productId", "$product"] } } },
+            { $project: { title: 1, description: 1 } },
+          ],
+          as: "items.program",
+        },
+      },
+      { $addFields: { "items.program": { $arrayElemAt: ["$items.program", 0] } } },
+      {
+        $group: {
+          _id: "$_id",
+          user: { $first: "$user" },
+          totalPrice: { $first: "$totalPrice" },
+          items: { $push: "$items" },
+        },
+      },
+      {
+        $project: {
+          cartId: "$_id",
+          user: { _id: "$user._id", username: "$user.username", email: "$user.email", role: "$user.role", profileImage: "$user.profileImage" },
+          totalPrice: 1,
+          items: 1,
+        },
+      },
+    ]);
+
+    res.status(200).json(carts);
   } catch (err: any) {
     console.error("Error fetching full cart:", err);
-    res.status(500).json({
-      message: "Error fetching full cart details",
-      error: err.message || err,
-    });
+    res.status(500).json({ message: "Error fetching full cart", error: err.message || err });
   }
+};
+
+
+export const createCartNotification = async (userId: string) => {
+  io.to("superadmin").emit("cart_notification", { message: `Cart updated by user ${userId}` });
 };

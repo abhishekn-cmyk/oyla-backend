@@ -1,12 +1,20 @@
+// src/types/express.d.ts
 import { IUser } from "../models/User"; // adjust path if needed
 
-declare module "express-serve-static-core" {
-  interface Request {
-    user?: {
-      _id: string;
-      role: string;
-      email?: string;
-      username?: string;
-    };
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        _id: string;
+        role: string;
+        email?: string;
+        username?: string;
+      };
+      superadmin?: {
+        _id: string;
+        role: string;
+        email?: string;
+      };
+    }
   }
 }

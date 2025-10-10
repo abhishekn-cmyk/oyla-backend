@@ -13,19 +13,19 @@ const router = express.Router();
 
 // ------------------ SUPERADMIN ROUTES ------------------
 // Create a privacy policy
-router.post("/create", protect, authorize(["SuperAdmin"]), createPrivacyPolicy);
+router.post("/create", protect, authorize(["superadmin"]), createPrivacyPolicy);
 
 // Update a privacy policy
-router.put("/update/:policyId", protect, authorize(["SuperAdmin"]), updatePrivacyPolicy);
+router.put("/update/:policyId", protect, authorize(["superadmin"]), updatePrivacyPolicy);
 
 // ------------------ USER / PUBLIC ROUTES ------------------
 // Get active privacy policy
-router.get("/active", protect, authorize(["User"]), getActivePrivacyPolicy);
+router.get("/active", protect, authorize(["user"]), getActivePrivacyPolicy);
 
-// Get all privacy policies
+// Get all privacy policies (public)
 router.get("/all", getAllPrivacyPolicies);
-// Delete a privacy policy
-router.delete("/delete/:policyId", protect, authorize(["SuperAdmin"]), deletePrivacyPolicy);
 
+// Delete a privacy policy
+router.delete("/delete/:policyId", protect, authorize(["superadmin"]), deletePrivacyPolicy);
 
 export default router;

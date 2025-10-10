@@ -2,7 +2,8 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import Reward from "../models/Reward";
 import User from "../models/User";
-
+import { io } from "../server";
+import { createUserNotification } from "./createNotification";
 // Extend the Request type to include user with all required properties
 interface AuthenticatedRequest extends Request {
   user: {
@@ -80,13 +81,23 @@ export const assignRewardToUser = async (req: Request, res: Response) => {
 
     if (!reward.users) reward.users = [];
 
-    const userObjectId = new mongoose.Types.ObjectId(user._id);
+    const userObjectId = new mongoose.Types.ObjectId(user.id);
 
-    if (!reward.users.some(u => u.toString() === user._id.toString())) {
+    if (!reward.users.some(u => u.toString() === user.id.toString())) {
       reward.users.push(userObjectId);
+      await reward.save();
+
+      // ------------------ Send Notification ------------------
+      const notification = await createUserNotification(
+        userId,
+        "New Reward Assigned",
+        `You have been assigned the reward: ${reward.title}`
+      );
+
+      // Emit real-time notification via Socket.IO
+      io.to(userId).emit("newNotification", notification);
     }
 
-    await reward.save();
     res.status(200).json({ message: "Reward assigned to user", reward });
   } catch (err: any) {
     res.status(500).json({ error: err.message || err });
@@ -102,20 +113,21 @@ export const redeemReward = async (req: AuthenticatedRequest, res: Response) => 
     const reward = await Reward.findById(rewardId);
     if (!reward) return res.status(404).json({ message: "Reward not found" });
 
-    // Check if user is assigned
     if (!reward.users?.some(u => u.toString() === userId.toString())) {
       return res.status(400).json({ message: "You do not have this reward assigned" });
     }
 
-    // Remove user from `users` and add to `redeemedUsers`
+    // Redeem logic
     reward.users = reward.users.filter(u => u.toString() !== userId.toString());
-
-    if (!reward.redeemedUsers) reward.redeemedUsers = [];
+    reward.redeemedUsers = reward.redeemedUsers || [];
     if (!reward.redeemedUsers.some(u => u.toString() === userId.toString())) {
       reward.redeemedUsers.push(new mongoose.Types.ObjectId(userId));
     }
 
     await reward.save();
+
+    // Emit real-time event
+    io.emit("rewardRedeemed", { rewardId, userId });
 
     res.status(200).json({ message: "Reward redeemed successfully", reward });
   } catch (err: any) {

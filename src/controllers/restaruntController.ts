@@ -93,6 +93,7 @@ const parseProductFields = (body: any, file?: Express.Multer.File): Partial<IPro
   nutrition: body.nutrition ? JSON.parse(body.nutrition) : {},
   ingredients: body.ingredients ? JSON.parse(body.ingredients) : [],
   availableDates: body.availableDates ? JSON.parse(body.availableDates) : [],
+  availableDays:body.availableDays,
   image: file?.path,
   stock: Number(body.stock) || 0,
 });
@@ -105,19 +106,18 @@ export const addProductToMenu = async (req: Request, res: Response) => {
 
     // Save product first
     const productData = parseProductFields(req.body, req.file);
-    const product = new Product(productData);
-    await product.save();
+  
 
     // Push product ID only
-    restaurant.menu.push(product._id as Types.ObjectId);
+    restaurant.menu.push(productData._id as Types.ObjectId);
 
     if (req.body.isPopular) {
-      restaurant.popularMenu.push(product._id as Types.ObjectId);
+      restaurant.popularMenu.push(productData._id as Types.ObjectId);
     }
 
     await restaurant.save();
 
-    res.status(201).json({ restaurant, product });
+    res.status(201).json({ restaurant, product:productData });
   } catch (error) {
     console.error("Error adding product to menu:", error);
     res.status(500).json({ message: "Error adding product to menu", error });
@@ -131,15 +131,14 @@ export const addProductToPopularMenu = async (req: Request, res: Response) => {
     if (!restaurant) return res.status(404).json({ message: "Restaurant not found" });
 
     const productData = parseProductFields(req.body, req.file);
-    const product = new Product(productData);
-    await product.save();
+   
 
     // Only push the product ID
-    restaurant.popularMenu.push(product._id as Types.ObjectId);
+    restaurant.popularMenu.push(productData._id as Types.ObjectId);
 
     await restaurant.save();
 
-    res.status(201).json({ restaurant, product });
+    res.status(201).json({ restaurant, product:productData });
   } catch (error) {
     console.error("Error adding product to popular menu:", error);
     res.status(500).json({ message: "Error adding product to popular menu", error });

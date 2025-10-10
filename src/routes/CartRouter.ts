@@ -14,19 +14,19 @@ const router = express.Router();
 
 // ------------------ User Routes ------------------
 // Get user's cart
-router.get("/:userId", protect, authorize(["User"]), getCartByUser);
+router.get("/:userId", protect, authorize(["user"]), getCartByUser);
 
 // Add item to cart
-router.post("/:productId/:userId/add", protect, authorize(["User"]), addToCart);
+router.post("/:productId/:userId/add", protect, authorize(["user"]), addToCart);
 
 // Update item in cart
-router.put("/:productId/:userId/update", protect, authorize(["User"]), updateCartItem);
+router.put("/:productId/:userId/update", protect, authorize(["user"]), updateCartItem);
 
 // Delete item from cart
-router.delete("/:productId/:userId/delete", protect, authorize(["User"]), deleteCartItem);
+router.delete("/:productId/:userId/delete", protect, authorize(["user"]), deleteCartItem);
 
 // ------------------ Admin / SuperAdmin Routes ------------------
 // Get full cart details (SuperAdmin only)
-router.get("/full/cart-details", protect, authorize(["SuperAdmin"]), getFullCart);
+router.get("/full/cart-details", protect, authorize(["superadmin"]), getFullCart);
 
 export default router;

@@ -1,40 +1,40 @@
-import mongoose, { Schema, Document, InferSchemaType } from "mongoose";
-import bcrypt from "bcryptjs";
+import { Schema, model, Document } from "mongoose";
 
-const superAdminSchema = new Schema(
+export interface ISuperAdmin extends Document {
+  email: string;
+  password: string;
+  name: string;
+  role: "superadmin";
+  permissions: string[];
+  phoneNumber: string;
+  lastLogin?: Date;
+  isActive: boolean;
+  profileImage: string;
+
+  // New fields
+  terms?: string;
+  privacyPolicy?: string;
+  renewalRules?: string;
+}
+
+const SuperAdminSchema = new Schema<ISuperAdmin>(
   {
-    username: { type: String },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
-    mobileNumber: { type: String },
-    role: { type: String, enum: ["superadmin"], default: "superadmin" },
+    name: { type: String },
     profileImage: { type: String },
+    phoneNumber: { type: String },
+    role: { type: String, enum: ["superadmin"], default: "superadmin" },
+    permissions: [{ type: String }],
+    lastLogin: { type: Date },
+    isActive: { type: Boolean, default: true },
+
+    // Policies fields
+    terms: { type: String, default: "" },
+    privacyPolicy: { type: String, default: "" },
+    renewalRules: { type: String, default: "" },
   },
   { timestamps: true }
 );
 
-// 🔑 Infer TypeScript type from schema
-export type ISuperAdmin = InferSchemaType<typeof superAdminSchema> &
-  Document & {
-    _id: mongoose.Types.ObjectId;
-    comparePassword(candidatePassword: string): Promise<boolean>;
-  };
-
-// Hash password before saving
-superAdminSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
-});
-
-// Compare password
-superAdminSchema.methods.comparePassword = async function (
-  candidatePassword: string
-) {
-  return bcrypt.compare(candidatePassword, this.password);
-};
-
-// ✅ Cast through unknown to avoid TS complaints
-const SuperAdmin = mongoose.model("SuperAdmin", superAdminSchema) as unknown as mongoose.Model<ISuperAdmin>;
-export default SuperAdmin;
+export default model<ISuperAdmin>("SuperAdmin", SuperAdminSchema);

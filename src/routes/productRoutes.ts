@@ -13,6 +13,8 @@ import {
   getAvailableProducts,
   getProductsByCategory,
   getProgramProductsByCategory,
+  addProductExpense,
+  getProductFinancials,
 } from "../controllers/ProductController";
 import { upload } from "../middleware/upload";
 import { protect } from "../middleware/protect";
@@ -34,24 +36,26 @@ router.get("/program/:programId/category/:category", getProgramProductsByCategor
 // ----------------- PROTECTED ROUTES (SUPERADMIN ONLY) -----------------
 
 // Standalone products
-router.post("/", protect, authorize(["SuperAdmin"]), upload.single("image"), createProduct);
-router.put("/:id", protect, authorize(["SuperAdmin"]), upload.single("image"), updateProduct);
-router.delete("/:id", protect, authorize(["SuperAdmin"]), deleteProduct);
+router.post("/", protect, authorize(["superadmin"]), upload.single("image"), createProduct);
+router.put("/:id", protect, authorize(["superadmin"]), upload.single("image"), updateProduct);
+router.delete("/:id", protect, authorize(["superadmin"]), deleteProduct);
 
 // Program products
-router.post("/program/:programId", protect, authorize(["SuperAdmin"]), upload.single("image"), addProgramProduct);
+router.post("/program/:programId", protect, authorize(["superadmin"]), upload.single("image"), addProgramProduct);
 router.put(
   "/program/:programId/product/:productId",
   protect,
-  authorize(["SuperAdmin"]),
+  authorize(["superadmin"]),
   upload.single("image"),
   updateProgramProduct
 );
 router.delete(
   "/program/:programId/product/:productId",
   protect,
-  authorize(["SuperAdmin"]),
+  authorize(["superadmin"]),
   deleteProgramProduct
 );
 
+router.post('/products/:productId/add-expense',addProductExpense);
+router.get('/products/:productId/financials',getProductFinancials);
 export default router;

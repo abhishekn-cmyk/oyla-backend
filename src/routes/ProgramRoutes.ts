@@ -17,8 +17,8 @@ router.get("/", getPrograms); // Get all programs
 router.get("/search", searchPrograms); // Search programs (public)
 
 // ----------------- PROTECTED ROUTES (SUPERADMIN ONLY) -----------------
-router.post("/", protect, authorize(["SuperAdmin"]), upload.single("image"), createProgram); // Create program
-router.put("/:id", protect, authorize(["SuperAdmin"]), upload.single("image"), updateProgram); // Update program
-router.delete("/:id", protect, authorize(["SuperAdmin"]), deleteProgram); // Delete program
+router.post("/", protect, authorize(["superadmin"]), upload.single("image"), createProgram); // Create program
+router.put("/:id", protect, authorize(["superadmin"]), upload.single("image"), updateProgram); // Update program
+router.delete("/:id", protect, authorize(["superadmin"]), deleteProgram); // Delete program
 
 export default router;

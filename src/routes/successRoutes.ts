@@ -17,11 +17,11 @@ router.get("/", getSuccessStories);         // get all stories
 router.get("/:id", getSuccessStoryById);    // get story by ID
 
 // -------------------- PROTECTED ROUTES --------------------
-// Only logged-in + SuperAdmin can create, update, delete
+// Only logged-in + superadmin can create, update, delete
 router.post(
   "/",
   protect,
-  authorize(["SuperAdmin"]),
+  authorize(["superadmin"]),
   upload.single("image"), // upload single image
   createSuccessStory
 );
@@ -29,7 +29,7 @@ router.post(
 router.put(
   "/:id",
   protect,
-  authorize(["SuperAdmin"]),
+  authorize(["superadmin"]),
   upload.single("image"),
   updateSuccessStory
 );
@@ -37,7 +37,7 @@ router.put(
 router.delete(
   "/:id",
   protect,
-  authorize(["SuperAdmin"]),
+  authorize(["superadmin"]),
   deleteSuccessStory
 );
 

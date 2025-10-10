@@ -61,7 +61,7 @@ export const loginSuperAdmin = async (req: Request, res: Response) => {
    
 
     // Generate JWT token
-    const token = generateToken(superAdmin._id.toString(), superAdmin.role);
+    const token = generateToken(superAdmin.id.toString(), superAdmin.role);
 
     // Send response
     res.status(200).json({
@@ -88,9 +88,9 @@ export const updateSuperAdminProfile = async (req: Request, res: Response) => {
     const superadmin = await SuperAdmin.findById(id);
     if (!superadmin) return res.status(404).json({ message: "SuperAdmin not found" });
 
-    superadmin.username = username || superadmin.username;
+    superadmin.name = username || superadmin.email;
     superadmin.email = email || superadmin.email;
-    superadmin.mobileNumber = mobileNumber || superadmin.mobileNumber;
+    superadmin.phoneNumber = mobileNumber || superadmin.phoneNumber;
     if (profileImage) superadmin.profileImage = profileImage;
 
     await superadmin.save();
@@ -128,5 +128,39 @@ export const updateSuperAdminPassword = async (req: Request, res: Response) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
+  }
+};
+
+
+
+export const getPolicies = async (req: Request, res: Response) => {
+  try {
+    const adminId = req.params.id;
+    const admin = await SuperAdmin.findById(adminId).select("terms privacyPolicy renewalRules");
+    if (!admin) return res.status(404).json({ error: "SuperAdmin not found" });
+
+    res.json(admin);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch policies" });
+  }
+};
+
+// Update SuperAdmin policies
+export const updatePolicies = async (req: Request, res: Response) => {
+  try {
+    const adminId = req.params.id;
+    const { terms, privacyPolicy, renewalRules } = req.body;
+
+    const admin = await SuperAdmin.findById(adminId);
+    if (!admin) return res.status(404).json({ error: "SuperAdmin not found" });
+
+    admin.terms = terms || admin.terms;
+    admin.privacyPolicy = privacyPolicy || admin.privacyPolicy;
+    admin.renewalRules = renewalRules || admin.renewalRules;
+
+    await admin.save();
+    res.json(admin);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update policies" });
   }
 };

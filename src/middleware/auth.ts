@@ -1,39 +1,24 @@
-import { NextFunction, Request, Response } from "express";
-
-type UserRole = "SuperAdmin" | "User";
-
-interface AuthRequest extends Request {
-  user?: { role: string ,_id: string,
-        // Add this required property
-        email?: string,
-        username?: string };
-}
+import { Response, NextFunction } from "express";
+import { AuthRequest, UserRole } from "./Authrequest";
 
 export const authorize = (roles: UserRole[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
-      return res.status(403).json({
-        success: false,
-        message: "Access denied: No user found.",
-      });
+      res.status(403).json({ success: false, message: "Access denied: No user found" });
+      return;
     }
 
-    const userRole = req.user.role.toLowerCase();
+    const userRole = req.user.role as UserRole; // <--- type assertion
 
-    // SuperAdmin always allowed
-    if (userRole === "superadmin") {
-      return next();
+    // superadmin bypass
+    if (userRole === "superadmin" || roles.includes(userRole)) {
+      next();
+      return;
     }
 
-    // Check if user's role is in allowed roles (case-insensitive)
-    const allowedRoles = roles.map(r => r.toLowerCase());
-    if (!allowedRoles.includes(userRole)) {
-      return res.status(403).json({
-        success: false,
-        message: "Access denied: You do not have the required role.",
-      });
-    }
-
-    next();
+    res.status(403).json({
+      success: false,
+      message: "Access denied: You do not have the required role.",
+    });
   };
 };

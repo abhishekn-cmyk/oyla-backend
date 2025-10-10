@@ -1,0 +1,518 @@
+import { Request, Response } from "express";
+import NodeCache from "node-cache";
+import Stripe from "stripe";
+import mongoose, { Types } from "mongoose";
+
+import Payment from "../models/Payment";
+import Subscription from "../models/Subscription";
+import User from "../models/User";
+import ProductModel from "../models/Product";
+import SystemSettings from "../models/SystemSettings";
+import { DailyOrder } from "../models/DailyOrder";
+import { Wallet, WalletHistory } from "../models/Wallet";
+import { SubscriptionStatus } from "../models/Subscription";
+import { createUserNotification } from "./createNotification";
+import { io } from "../server";
+
+const mealCache = new NodeCache({ stdTTL: 3600 });
+
+// Stripe initialization
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-08-27.basil" });
+
+// -------------------- HELPER --------------------
+const getSetting = async <T>(key: string, defaultValue: T): Promise<T> => {
+  const setting = await SystemSettings.findOne({ key });
+  return setting ? (setting.value as T) : defaultValue;
+};
+
+// -------------------- USER CHECKOUT --------------------
+export const checkoutSubscription = async (req: Request, res: Response) => {
+  await createSubscriptionUser(req, res);
+};
+
+// -------------------- CREATE SUBSCRIPTION (USER + WALLET + STRIPE) --------------------
+export const createSubscriptionUser = async (req: Request, res: Response) => {
+  try {
+    const { userId, planType, durationDays, mealsPerDay, startDate, billingCycle, paymentMethod } = req.body;
+
+    if (!userId || !planType || !durationDays || !mealsPerDay || !startDate || !billingCycle || !paymentMethod)
+      return res.status(400).json({ success: false, message: "Missing required fields" });
+
+    if (!["basic", "premium", "pro"].includes(planType))
+      return res.status(400).json({ success: false, message: "Invalid planType" });
+
+    if (!["monthly", "quarterly", "yearly"].includes(billingCycle))
+      return res.status(400).json({ success: false, message: "Invalid billingCycle" });
+
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    const basePrice = (await SystemSettings.findOne({ key: "price_per_meal" }))?.value || 150;
+    const discount = durationDays === 14 ? 0.05 : durationDays === 28 ? 0.1 : 0;
+    const totalMeals = durationDays * mealsPerDay;
+    const totalPrice = Math.round(totalMeals * basePrice * (1 - discount));
+
+    let subscriptionStatus: "active" | "pending" = "pending";
+    let transactionId: string | undefined;
+    let paymentResponse: any = null;
+
+    // Wallet payment
+    if (paymentMethod === "wallet") {
+      const wallet = await Wallet.findOne({ userId });
+      if (!wallet || wallet.balance < totalPrice)
+        return res.status(400).json({ success: false, message: "Insufficient wallet balance" });
+
+      const balanceBefore = wallet.balance;
+      wallet.balance -= totalPrice;
+      wallet.totalSpent += totalPrice;
+      await wallet.save();
+
+      await new WalletHistory({
+        userId,
+        walletId: wallet._id,
+        type: "payment",
+        amount: totalPrice,
+        currency: wallet.currency,
+        balanceBefore,
+        balanceAfter: wallet.balance,
+        description: "Subscription payment",
+        status: "completed",
+      }).save();
+
+      subscriptionStatus = "active";
+      transactionId = `WALLET_${Date.now()}`;
+
+      const walletMsg = `Your subscription payment of ₹${totalPrice} using wallet is completed.`;
+      io.to(userId.toString()).emit("payment_notification", { message: walletMsg, amount: totalPrice, paymentMethod: "wallet" });
+      await createUserNotification(userId, "Payment Success", walletMsg, "inApp");
+    }
+
+    // Meals array
+    const mealsArray = [];
+    const start = new Date(startDate);
+    for (let i = 0; i < durationDays; i++) {
+      const day = new Date(start);
+      day.setDate(start.getDate() + i);
+      mealsArray.push({ date: day, isLocked: false });
+    }
+
+    const subscription = new Subscription({
+      userId,
+      planType,
+      planName: `${durationDays}-day plan`,
+      startDate: start,
+      endDate: new Date(start.getTime() + durationDays * 86400000),
+      mealsPerDay,
+      totalMeals,
+      price: totalPrice,
+      status: subscriptionStatus,
+      autoRenew: false,
+      billingCycle,
+      meals: mealsArray,
+      payment: {
+        gateway: paymentMethod,
+        status: subscriptionStatus === "active" ? "completed" : "pending",
+        amountPaid: subscriptionStatus === "active" ? totalPrice : 0,
+        currency: "INR",
+      },
+    });
+    await subscription.save();
+
+    // Stripe payment
+    if (paymentMethod === "stripe") {
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: totalPrice * 100,
+        currency: "INR",
+        metadata: { subscriptionId: (subscription._id as Types.ObjectId).toString(), userId },
+      });
+      transactionId = paymentIntent.id;
+      paymentResponse = paymentIntent;
+    }
+
+    const paymentRecord = await new Payment({
+      userId,
+      subscriptionId: subscription._id,
+      amount: totalPrice,
+      currency: "INR",
+      gateway: paymentMethod,
+      status: subscriptionStatus === "active" ? "completed" : "pending",
+      transactionId,
+    }).save();
+
+    res.status(200).json({ success: true, subscription, payment: paymentRecord, paymentResponse });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Failed to create subscription", error: err });
+  }
+};
+
+// -------------------- CREATE SUBSCRIPTION (ADMIN) --------------------
+export const createSubscriptionAdmin = async (req: Request, res: Response) => {
+  try {
+    const { userId, durationDays, mealsPerDay, startDate, mealTypes = ["main"] } = req.body;
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    const subscription = new Subscription({
+      userId,
+      planType: mealTypes.join("-"),
+      planName: `${durationDays}-day plan`,
+      startDate,
+      endDate: new Date(new Date(startDate).getTime() + durationDays * 86400000),
+      mealsPerDay,
+      totalMeals: durationDays * mealsPerDay,
+      price: 0,
+      status: "active",
+      autoRenew: false,
+    });
+    await subscription.save();
+
+    res.status(200).json({ success: true, message: "Admin subscription created", subscription });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Failed to create subscription", error: err });
+  }
+};
+
+// -------------------- STRIPE WEBHOOK --------------------
+export const stripeWebhook = async (req: Request, res: Response) => {
+  const sig = req.headers["stripe-signature"]!;
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET!;
+  let event: Stripe.Event;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+  } catch (err: any) {
+    console.error(err);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === "payment_intent.succeeded") {
+    const paymentIntent = event.data.object as Stripe.PaymentIntent;
+    const subscriptionId = paymentIntent.metadata.subscriptionId;
+    const userId = paymentIntent.metadata.userId;
+
+    const subscription = await Subscription.findById(subscriptionId);
+    if (!subscription) return res.status(404).json({ message: "Subscription not found" });
+
+    subscription.status = "active";
+    subscription.payment.status = "completed";
+    subscription.payment.amountPaid = paymentIntent.amount / 100;
+    await subscription.save();
+
+    const paymentRecord = await new Payment({
+      userId,
+      subscriptionId,
+      amount: paymentIntent.amount / 100,
+      currency: "INR",
+      gateway: "stripe",
+      status: "completed",
+      transactionId: paymentIntent.id,
+    }).save();
+
+    const msg = `Your payment of ₹${paymentRecord.amount} via Stripe is completed successfully.`;
+    io.to(userId.toString()).emit("payment_notification", { message: msg, payment: paymentRecord });
+    await createUserNotification(userId.toString(), "Payment Success", msg, "inApp");
+  }
+
+  res.json({ received: true });
+};
+
+// -------------------- SUBSCRIPTION CONTROLS --------------------
+export const pauseSubscription = async (req: Request, res: Response) => {
+  const sub = await Subscription.findById(req.params.subscriptionId);
+  if (!sub) return res.status(404).json({ message: "Subscription not found" });
+
+  sub.isPaused = true;
+  sub.pauseCount = (sub.pauseCount || 0) + 1;
+  await sub.save();
+
+  const msg = `Your subscription "${sub.planName}" has been paused.`;
+  io.to(sub.userId.toString()).emit("subscription_notification", { message: msg });
+  await createUserNotification(sub.userId.toString(), "Subscription Paused", msg, "inApp");
+
+  res.json({ success: true, subscription: sub });
+};
+
+export const resumeSubscription = async (req: Request, res: Response) => {
+  const sub = await Subscription.findById(req.params.subscriptionId);
+  if (!sub) return res.status(404).json({ message: "Subscription not found" });
+
+  sub.isPaused = false;
+  await sub.save();
+
+  const msg = `Your subscription "${sub.planName}" has been resumed.`;
+  io.to(sub.userId.toString()).emit("subscription_notification", { message: msg });
+  await createUserNotification(sub.userId.toString(), "Subscription Resumed", msg, "inApp");
+
+  res.json({ success: true, subscription: sub });
+};
+
+export const cancelSubscription = async (req: Request, res: Response) => {
+  const sub = await Subscription.findById(req.params.subscriptionId);
+  if (!sub) return res.status(404).json({ message: "Subscription not found" });
+
+  sub.status = "cancelled";
+  await sub.save();
+
+  const msg = `Your subscription "${sub.planName}" has been cancelled.`;
+  io.to(sub.userId.toString()).emit("subscription_notification", { message: msg });
+  await createUserNotification(sub.userId.toString(), "Subscription Cancelled", msg, "inApp");
+
+  res.json({ success: true, subscription: sub });
+};
+
+export const freezeSubscription = async (req: Request, res: Response) => {
+  const sub = await Subscription.findById(req.params.subscriptionId);
+  if (!sub) return res.status(404).json({ message: "Subscription not found" });
+
+  sub.isFrozen = true;
+  await sub.save();
+
+  const msg = `Your subscription "${sub.planName}" has been frozen.`;
+  io.to(sub.userId.toString()).emit("subscription_notification", { message: msg });
+  await createUserNotification(sub.userId.toString(), "Subscription Frozen", msg, "inApp");
+
+  res.json({ success: true, subscription: sub });
+};
+
+// -------------------- MEALS --------------------
+export const deliverMeal = async (req: Request, res: Response) => {
+  const sub = await Subscription.findById(req.params.subscriptionId);
+  if (!sub) return res.status(404).json({ message: "Subscription not found" });
+
+  sub.lastDeliveredAt = new Date();
+  await sub.save();
+
+  const msg = `Your meal for subscription "${sub.planName}" has been delivered. Enjoy!`;
+  io.to(sub.userId.toString()).emit("meal_notification", { message: msg });
+  await createUserNotification(sub.userId.toString(), "Meal Delivered", msg, "inApp");
+
+  res.json({ success: true, subscription: sub });
+};
+
+export const swapMeal = async (req: Request, res: Response) => {
+  const { subscriptionId } = req.params;
+  const { date, slot } = req.body;
+  const dayStart = new Date(date); dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(date); dayEnd.setHours(23, 59, 59, 999);
+
+  const dailyOrder = await DailyOrder.findOne({ subscriptionId, date: { $gte: dayStart, $lte: dayEnd } });
+  if (!dailyOrder) return res.status(404).json({ message: "Daily order not found" });
+
+  const mealIndex = dailyOrder.meals.findIndex((m) => m.slot === slot);
+  if (mealIndex === -1) return res.status(400).json({ message: "Meal slot not found" });
+
+  let mealsList: any[] = mealCache.get(`meals_${slot}`) || [];
+  if (!mealsList.length) {
+    mealsList = await ProductModel.find({ type: slot, isActive: true });
+    mealCache.set(`meals_${slot}`, mealsList);
+  }
+  if (!mealsList.length) return res.status(404).json({ message: "No meals available to swap" });
+
+  const currentMealId = dailyOrder.meals[mealIndex].productId.toString();
+  const filteredMeals = mealsList.filter((meal) => meal._id.toString() !== currentMealId);
+  if (!filteredMeals.length) return res.status(400).json({ message: "No alternative meals available" });
+
+  dailyOrder.meals[mealIndex].productId = filteredMeals[Math.floor(Math.random() * filteredMeals.length)]._id;
+  await dailyOrder.save();
+  res.json({ success: true, dailyOrder });
+};
+
+// -------------------- SUBSCRIPTION STATS --------------------
+export const getSubscriptionById = async (req: Request, res: Response) => {
+  const sub = await Subscription.findById(req.params.subscriptionId);
+  if (!sub) return res.status(404).json({ message: "Subscription not found" });
+  res.json({ success: true, subscription: sub });
+};
+
+export const getAllSubscriptions = async (_req: Request, res: Response) => {
+  const subs = await Subscription.find().sort({ startDate: -1 });
+  res.json({ success: true, subscriptions: subs });
+};
+
+export const getSubscriptionsByUser = async (req: Request, res: Response) => {
+  const subs = await Subscription.find({ userId: req.params.userId }).sort({ startDate: -1 });
+  if (!subs.length) return res.status(404).json({ message: "No subscriptions found" });
+  res.json({ success: true, subscriptions: subs });
+};
+
+export const getSubscriptionStats = async (req: Request, res: Response) => {
+  const sub = await Subscription.findById(req.params.subscriptionId);
+  if (!sub) return res.status(404).json({ message: "Subscription not found" });
+
+  const dailyOrdersCount = await DailyOrder.countDocuments({ subscriptionId: sub._id });
+  res.json({ success: true, stats: { totalMeals: sub.totalMeals, dailyOrdersCount } });
+};
+
+export const getAllStats = async (_req: Request, res: Response) => {
+  const totalSubscriptions = await Subscription.countDocuments();
+  const activeSubscriptions = await Subscription.countDocuments({ status: "active" });
+  const sub = await Subscription.find();
+  res.json({ success: true, stats: { totalSubscriptions, activeSubscriptions, subscription: sub } });
+};
+
+// -------------------- AUTO-RENEW --------------------
+export const autoRenewSubscriptions = async () => {
+  try {
+    const autoRenewEnabled = await getSetting<boolean>("subscription.autoRenewEnabled", true);
+    if (!autoRenewEnabled) return;
+
+    const expiringSubs = await Subscription.find({ endDate: { $lte: new Date() }, autoRenew: true, status: "active" });
+
+    for (const sub of expiringSubs) {
+      try {
+        if (!sub.userId) continue;
+        const user = await User.findById(sub.userId);
+        if (!user || !user.stripeCustomerId || !user.stripePaymentMethodId) continue;
+
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: Math.round(sub.price * 100),
+          currency: "inr",
+          customer: user.stripeCustomerId,
+          payment_method: user.stripePaymentMethodId,
+          off_session: true,
+          confirm: true,
+          metadata: { subscriptionId: sub.id.toString() },
+        });
+
+        if (paymentIntent.status === "succeeded") {
+          sub.startDate = new Date();
+          sub.endDate = new Date(new Date().setDate(new Date().getDate() + (sub.durationDays || 7)));
+          await sub.save();
+        }
+      } catch (err) {
+        console.error("Auto-renewal failed:", err);
+      }
+    }
+  } catch (error) {
+    console.error("Error in auto renewal:", error);
+  }
+};
+
+// -------------------- LOCK MEALS AFTER CHANGE WINDOW --------------------
+export const lockMealsAfterChangeWindow = async () => {
+  try {
+    const changeWindowDays = await getSetting<number>("subscription.changeWindowDays", 3);
+    const subscriptions = await Subscription.find();
+
+    for (const sub of subscriptions) {
+      const lockDate = new Date(sub.startDate);
+      lockDate.setDate(lockDate.getDate() + changeWindowDays);
+
+      if (new Date() > lockDate) {
+        await DailyOrder.updateMany(
+          { subscriptionId: sub._id },
+          { $set: { "meals.$[].isLocked": true } }
+        );
+      }
+    }
+  } catch (error) {
+    console.error("Error locking meals:", error);
+  }
+};
+
+// -------------------- SETTINGS --------------------
+export const upsertSetting = async (req: Request, res: Response) => {
+  try {
+    const { key, value, description, category } = req.body;
+    const setting = await SystemSettings.findOneAndUpdate({ key }, { value, description, category }, { new: true, upsert: true });
+    res.json({ message: "Setting saved successfully", setting });
+  } catch (error) {
+    res.status(500).json({ message: "Error saving setting", error });
+  }
+};
+
+export const getSettings = async (req: Request, res: Response) => {
+  try {
+    const { category } = req.query;
+    const filter = category ? { category } : {};
+    const settings = await SystemSettings.find(filter);
+    res.json({ settings });
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching settings", error });
+  }
+};
+
+export const deleteSetting = async (req: Request, res: Response) => {
+  try {
+    const { key } = req.params;
+    const result = await SystemSettings.findOneAndDelete({ key });
+    if (!result) return res.status(404).json({ message: "Setting not found" });
+    res.json({ message: "Setting deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Error deleting setting", error });
+  }
+};
+export const createSubscription = async (req: Request, res: Response) => {
+  // Can point to user creation or admin creation depending on role
+ return createSubscriptionAdmin(req, res);
+  
+};
+export const handlePaymentWebhook = stripeWebhook;
+export const toggleSubscriptionStatus = async (req: Request, res: Response) => {
+  try {
+    const { subscriptionId } = req.params;
+    const { newStatus } = req.body; // client must send desired status
+
+    if (!SubscriptionStatus.includes(newStatus as any)) {
+      return res.status(400).json({ message: "Invalid subscription status" });
+    }
+
+    const sub = await Subscription.findById(subscriptionId);
+    if (!sub) return res.status(404).json({ message: "Subscription not found" });
+
+    sub.status = newStatus;
+    await sub.save();
+
+    const msg = `Subscription "${sub.planName}" status changed to ${sub.status}.`;
+    io.to(sub.userId.toString()).emit("subscription_notification", { message: msg });
+    await createUserNotification(sub.userId.toString(), "Subscription Status Changed", msg, "inApp");
+
+    res.json({ success: true, subscription: sub });
+  } catch (error) {
+    console.error("Error toggling subscription status:", error);
+    res.status(500).json({ message: "Internal server error", error });
+  }
+};
+export const updateSubscription = async (req: Request, res: Response) => {
+  const sub = await Subscription.findById(req.params.subscriptionId);
+  if (!sub) return res.status(404).json({ message: "Subscription not found" });
+
+  Object.assign(sub, req.body);
+  await sub.save();
+
+  res.json({ success: true, subscription: sub });
+};
+
+export const deleteSubscription = async (req: Request, res: Response) => {
+  const sub = await Subscription.findByIdAndDelete(req.params.subscriptionId);
+  if (!sub) return res.status(404).json({ message: "Subscription not found" });
+
+  res.json({ success: true, message: "Subscription deleted successfully" });
+};
+export const processRefund = async (req: Request, res: Response) => {
+  try {
+    const { subscriptionId, reason } = req.body;
+    const sub = await Subscription.findById(subscriptionId);
+    if (!sub) return res.status(404).json({ message: "Subscription not found" });
+
+    const payment = await Payment.findOne({ subscriptionId });
+    if (!payment || payment.status !== "completed")
+      return res.status(400).json({ message: "No completed payment found to refund" });
+
+    if (payment.gateway === "stripe") {
+      await stripe.refunds.create({ payment_intent: payment.transactionId });
+    }
+
+    payment.status = "refunded";
+    await payment.save();
+
+    sub.status = "cancelled";
+    await sub.save();
+
+    res.json({ success: true, message: "Refund processed successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Error processing refund", error });
+  }
+};

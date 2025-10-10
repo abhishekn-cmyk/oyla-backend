@@ -1,49 +1,62 @@
-import jwt, { JwtPayload } from "jsonwebtoken";
-import { NextFunction, Request, Response } from "express";
+import { Response, NextFunction } from "express";
+import jwt, {SignOptions, JwtPayload } from "jsonwebtoken";
 import asyncHandler from "express-async-handler";
-import SuperAdmin from "../models/SuperAdmin";
-import User from "../models/User";
-
-const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret_key";
-
-interface AuthRequest extends Request {
-  user?: any;
-}
-export const generateToken = (userId: string, role: string) => { return jwt.sign({ id: userId, role }, JWT_SECRET, { expiresIn: "30d" }); };
-export const protect = asyncHandler(
-  async (req: AuthRequest, res: Response, next: NextFunction) => {
+import User, { IUser } from "../models/User";
+import SuperAdmin, { ISuperAdmin } from "../models/SuperAdmin";
+import { AuthRequest } from "./Authrequest"; // import the interface
+export const protect = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
     const authHeader = req.headers.authorization;
-
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      res.status(401).json({ success: false, message: "Not authorized, no token" });
-      throw new Error("Not authorized, no token");
+       res.status(401).json({ success: false, message: "Not authorized, no token" });return;
     }
 
     const token = authHeader.split(" ")[1];
 
-    let decoded: JwtPayload;
-    try {
-      decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
-    } catch (error) {
-      res.status(401).json({ success: false, message: "Token is invalid" });
-      throw new Error("Token is invalid");
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
+    if (!decoded.sub || !decoded.role) {
+      res.status(401).json({ success: false, message: "Token payload invalid" });return;
     }
 
-    // Make role case-insensitive
-    const role = decoded.role?.toLowerCase();
+    let user: IUser | ISuperAdmin | null = null;
 
-    let user;
-    if (role === "user") user = await User.findById(decoded.id);
-    else if (role === "superadmin") user = await SuperAdmin.findById(decoded.id);
-   
+    if (decoded.role.toLowerCase() === "superadmin") {
+      user = await SuperAdmin.findById(decoded.sub).select("-password");
+    } else {
+      user = await User.findById(decoded.sub).select("-password");
+    }
+
     if (!user) {
-      res.status(401).json({ success: false, message: "User not found" });
-      throw new Error("User not found");
+       res.status(401).json({ success: false, message: "User not found" });return;
     }
 
-    req.user = user;
+    // Map Mongoose document to plain object
+    req.user = {
+      _id: user.id.toString(),
+      role: user.role,
+      email: "email" in user ? user.email : undefined,
+      username: "username" in user ? user.username : undefined,
+    };
+
     next();
+  } catch (err) {
+    console.error("Protect middleware error:", err);
+    res.status(401).json({ success: false, message: "Token is invalid or expired" });
   }
-);
+});
 
 
+export const generateToken = (id: string, role: string): string => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error('JWT_SECRET is not defined');
+
+  const payload = { sub: id, role };
+
+  // Ensure expiresIn is correctly typed
+  const expiresIn: `${number}${"s" | "m" | "h" | "d" | "y"}` = 
+    (process.env.JWT_EXPIRE as `${number}${"s" | "m" | "h" | "d" | "y"}`) || '30d';
+
+  const options: SignOptions = { expiresIn };
+
+  return jwt.sign(payload, secret, options);
+};
