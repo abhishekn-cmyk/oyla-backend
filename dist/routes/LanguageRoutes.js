@@ -13,9 +13,9 @@ router.get("/", LanguageController_1.getLanguages); // get all languages
 router.get("/:id", LanguageController_1.getLanguageById); // get language by ID
 // ----------------- PROTECTED ROUTES -----------------
 // Only regular users can create a language
-router.post("/", protect_1.protect, (0, auth_1.authorize)(["User"]), LanguageController_1.createLanguage);
+router.post("/", protect_1.protect, (0, auth_1.authorize)(["user"]), LanguageController_1.createLanguage);
 // Only SuperAdmin can update a language
-router.put("/:id", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), LanguageController_1.updateLanguage);
+router.put("/:id", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), LanguageController_1.updateLanguage);
 // Admin or SuperAdmin can delete a language
-router.delete("/:id", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), LanguageController_1.deleteLanguage);
+router.delete("/:id", protect_1.protect, (0, auth_1.authorize)(["admin", "superadmin"]), LanguageController_1.deleteLanguage);
 exports.default = router;

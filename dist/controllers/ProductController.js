@@ -12,54 +12,28 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getProgramProductsByCategory = exports.getProductsByProgram = exports.deleteProgramProduct = exports.updateProgramProduct = exports.addProgramProduct = exports.getAvailableProducts = exports.getProductsByCategory = exports.searchProduct = exports.deleteProduct = exports.updateProduct = exports.getProductById = exports.getProducts = exports.createProduct = void 0;
+exports.getProgramFinancials = exports.getProductFinancials = exports.addProductExpense = exports.getProgramProductsByCategory = exports.getProductsByProgram = exports.deleteProgramProduct = exports.updateProgramProduct = exports.addProgramProduct = exports.getAvailableProducts = exports.getProductsByCategory = exports.searchProduct = exports.deleteProduct = exports.getProductById = exports.getProducts = exports.updateProduct = exports.createProduct = void 0;
 const Product_1 = __importDefault(require("../models/Product"));
 const Program_1 = __importDefault(require("../models/Program"));
 const inspector_1 = require("inspector");
 const Restaurant_1 = __importDefault(require("../models/Restaurant"));
 // ---------- Standalone Product CRUD ----------
-const parseDates = (dates) => {
-    if (!dates)
-        return [];
-    if (Array.isArray(dates)) {
-        return dates
-            .map(d => new Date(d))
-            .filter(d => !isNaN(d.getTime())); // remove invalid dates
-    }
-    const singleDate = new Date(dates);
-    return isNaN(singleDate.getTime()) ? [] : [singleDate];
-};
-// Create Product
 const createProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { name, tagline, description, price, rating, nutrition, ingredients, mealType, stock, category, availableDate, // This should be a JSON string from FormData
-         } = req.body;
-        const image = req.file ? req.file.path : undefined;
-        // Parse ingredients safely
-        const ingredientsArray = ingredients
-            ? Array.isArray(ingredients)
-                ? ingredients
-                : JSON.parse(ingredients)
-            : [];
-        // Parse availableDates safely
-        const availableDatesArray = availableDate
-            ? JSON.parse(availableDate)
-                .map((d) => new Date(d))
-                .filter((d) => !isNaN(d.getTime())) // Remove invalid dates
-            : [];
+        const { name, tagline, description, costPrice, basePrice, category, mealType, ingredients, nutrition, availableDays, } = req.body;
+        const taglinesArray = tagline ? tagline.split(",").map((t) => t.trim()) : [];
         const product = new Product_1.default({
             name,
-            tagline,
+            taglines: taglinesArray,
             description,
-            price,
-            rating,
-            nutrition: nutrition ? JSON.parse(nutrition) : undefined,
-            ingredients: ingredientsArray,
-            mealType,
-            stock,
+            costPrice,
+            basePrice,
             category,
-            availableDates: availableDatesArray,
-            image,
+            mealType,
+            ingredients: ingredients ? JSON.parse(ingredients) : [],
+            nutrition: nutrition ? JSON.parse(nutrition) : {},
+            availableDays,
+            image: req.file ? req.file.path : undefined,
         });
         yield product.save();
         res.status(201).json({ message: "Product created", product });
@@ -70,6 +44,28 @@ const createProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     }
 });
 exports.createProduct = createProduct;
+// Update Product
+const updateProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { id } = req.params;
+        const { name, tagline, description, costPrice, basePrice, category, mealType, ingredients, nutrition, availableDays, } = req.body;
+        const taglinesArray = tagline ? tagline.split(",").map((t) => t.trim()) : [];
+        const updateData = Object.assign({ name, taglines: taglinesArray, description,
+            costPrice,
+            basePrice,
+            category,
+            mealType, ingredients: ingredients ? JSON.parse(ingredients) : [], nutrition: nutrition ? JSON.parse(nutrition) : {}, availableDays }, (req.file && { image: req.file.path }));
+        const updated = yield Product_1.default.findByIdAndUpdate(id, updateData, { new: true });
+        if (!updated)
+            return res.status(404).json({ message: "Product not found" });
+        res.status(200).json({ message: "Product updated", product: updated });
+    }
+    catch (err) {
+        inspector_1.console.error("Error updating product:", err);
+        res.status(500).json({ error: err });
+    }
+});
+exports.updateProduct = updateProduct;
 // Get All Products
 const getProducts = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -96,50 +92,6 @@ const getProductById = (req, res) => __awaiter(void 0, void 0, void 0, function*
     }
 });
 exports.getProductById = getProductById;
-// Update Product
-const updateProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { id } = req.params;
-        const { name, tagline, description, price, rating, nutrition, ingredients, mealType, stock, category, availableDate, } = req.body;
-        const image = req.file ? req.file.path : undefined;
-        const updateData = Object.assign(Object.assign({ name,
-            tagline,
-            description,
-            price,
-            rating, nutrition: nutrition ? JSON.parse(nutrition) : undefined, ingredients: ingredients ? JSON.parse(ingredients) : undefined, mealType,
-            stock,
-            category }, (availableDate && {
-            availableDates: Array.isArray(availableDate)
-                ? availableDate.map((d) => new Date(d)).filter(d => !isNaN(d.getTime()))
-                : [new Date(availableDate)],
-        })), (image && { image }));
-        const updated = yield Product_1.default.findByIdAndUpdate(id, updateData, { new: true });
-        if (!updated)
-            return res.status(404).json({ message: "Product not found" });
-        // ---------------- Update in Restaurants ----------------
-        // ---------------- Update in Restaurants ----------------
-        yield Restaurant_1.default.updateMany({ $or: [{ menu: id }, { popularMenu: id }] }, {
-            $set: {
-                "menu.$[m]": updated._id,
-                "popularMenu.$[p]": updated._id,
-            },
-        }, {
-            arrayFilters: [{ m: id }, { p: id }],
-        });
-        // ---------------- Update in Programs ----------------
-        yield Program_1.default.updateMany({ product: id }, {
-            $set: { "product.$[p]": updated._id },
-        }, {
-            arrayFilters: [{ p: id }],
-        });
-        res.status(200).json({ message: "Product updated", product: updated });
-    }
-    catch (err) {
-        inspector_1.console.error("Error updating product:", err);
-        res.status(500).json({ error: err });
-    }
-});
-exports.updateProduct = updateProduct;
 // Delete Product
 const deleteProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -470,3 +422,81 @@ const getProgramProductsByCategory = (req, res) => __awaiter(void 0, void 0, voi
     }
 });
 exports.getProgramProductsByCategory = getProgramProductsByCategory;
+// Add an expense to a product (update totalExpense)
+const addProductExpense = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { productId } = req.params;
+        const { amount } = req.body;
+        if (!amount || amount <= 0) {
+            return res.status(400).json({ message: "Amount must be greater than 0" });
+        }
+        const product = yield Product_1.default.findById(productId);
+        if (!product)
+            return res.status(404).json({ message: "Product not found" });
+        product.totalExpense = (product.totalExpense || 0) + amount;
+        yield product.save();
+        res.status(200).json({ message: "Expense added to product", totalExpense: product.totalExpense });
+    }
+    catch (err) {
+        inspector_1.console.error("Error adding expense to product:", err);
+        res.status(500).json({ message: err.message });
+    }
+});
+exports.addProductExpense = addProductExpense;
+// Get product financials (profit/loss) based on totalExpense
+const getProductFinancials = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { productId } = req.params;
+        const product = yield Product_1.default.findById(productId);
+        if (!product)
+            return res.status(404).json({ message: "Product not found" });
+        const totalRevenue = (product.price || 0) * (product.stock || 0);
+        const totalExpense = product.totalExpense || 0;
+        const profit = totalRevenue - totalExpense;
+        const profitPercentage = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0;
+        res.status(200).json({
+            productId: product._id,
+            name: product.name,
+            totalRevenue,
+            totalExpense,
+            profit,
+            profitPercentage,
+        });
+    }
+    catch (err) {
+        inspector_1.console.error("Error getting product financials:", err);
+        res.status(500).json({ message: err.message });
+    }
+});
+exports.getProductFinancials = getProductFinancials;
+// Get program financials using totalExpense of each product
+const getProgramFinancials = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { programId } = req.params;
+        const program = yield Program_1.default.findById(programId).populate("product");
+        if (!program)
+            return res.status(404).json({ message: "Program not found" });
+        let totalRevenue = 0;
+        let totalExpense = 0;
+        program.product.forEach((p) => {
+            const revenue = (p.price || 0) * (p.stock || 0);
+            totalRevenue += revenue;
+            totalExpense += p.totalExpense || 0;
+        });
+        const profit = totalRevenue - totalExpense;
+        const profitPercentage = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0;
+        res.status(200).json({
+            programId: program._id,
+            title: program.title,
+            totalRevenue,
+            totalExpense,
+            profit,
+            profitPercentage,
+        });
+    }
+    catch (err) {
+        inspector_1.console.error("Error getting program financials:", err);
+        res.status(500).json({ message: err.message });
+    }
+});
+exports.getProgramFinancials = getProgramFinancials;

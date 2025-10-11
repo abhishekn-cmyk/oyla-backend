@@ -10,14 +10,14 @@ const auth_1 = require("../middleware/auth");
 const router = express_1.default.Router();
 // ------------------ SUPERADMIN ROUTES ------------------
 // Create a privacy policy
-router.post("/create", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), privacyController_1.createPrivacyPolicy);
+router.post("/create", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), privacyController_1.createPrivacyPolicy);
 // Update a privacy policy
-router.put("/update/:policyId", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), privacyController_1.updatePrivacyPolicy);
+router.put("/update/:policyId", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), privacyController_1.updatePrivacyPolicy);
 // ------------------ USER / PUBLIC ROUTES ------------------
 // Get active privacy policy
-router.get("/active", protect_1.protect, (0, auth_1.authorize)(["User"]), privacyController_1.getActivePrivacyPolicy);
-// Get all privacy policies
+router.get("/active", protect_1.protect, (0, auth_1.authorize)(["user"]), privacyController_1.getActivePrivacyPolicy);
+// Get all privacy policies (public)
 router.get("/all", privacyController_1.getAllPrivacyPolicies);
 // Delete a privacy policy
-router.delete("/delete/:policyId", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), privacyController_1.deletePrivacyPolicy);
+router.delete("/delete/:policyId", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), privacyController_1.deletePrivacyPolicy);
 exports.default = router;

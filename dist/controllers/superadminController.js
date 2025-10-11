@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateSuperAdminPassword = exports.updateSuperAdminProfile = exports.loginSuperAdmin = exports.registerSuperAdmin = void 0;
+exports.updatePolicies = exports.getPolicies = exports.updateSuperAdminPassword = exports.updateSuperAdminProfile = exports.loginSuperAdmin = exports.registerSuperAdmin = void 0;
 const SuperAdmin_1 = __importDefault(require("../models/SuperAdmin"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const protect_1 = require("../middleware/protect");
@@ -66,7 +66,7 @@ const loginSuperAdmin = (req, res) => __awaiter(void 0, void 0, void 0, function
             return res.status(400).json({ message: "Invalid email or password" });
         }
         // Generate JWT token
-        const token = (0, protect_1.generateToken)(superAdmin._id.toString(), superAdmin.role);
+        const token = (0, protect_1.generateToken)(superAdmin.id.toString(), superAdmin.role);
         // Send response
         res.status(200).json({
             message: "Login successful",
@@ -93,9 +93,9 @@ const updateSuperAdminProfile = (req, res) => __awaiter(void 0, void 0, void 0, 
         const superadmin = yield SuperAdmin_1.default.findById(id);
         if (!superadmin)
             return res.status(404).json({ message: "SuperAdmin not found" });
-        superadmin.username = username || superadmin.username;
+        superadmin.name = username || superadmin.email;
         superadmin.email = email || superadmin.email;
-        superadmin.mobileNumber = mobileNumber || superadmin.mobileNumber;
+        superadmin.phoneNumber = mobileNumber || superadmin.phoneNumber;
         if (profileImage)
             superadmin.profileImage = profileImage;
         yield superadmin.save();
@@ -134,3 +134,35 @@ const updateSuperAdminPassword = (req, res) => __awaiter(void 0, void 0, void 0,
     }
 });
 exports.updateSuperAdminPassword = updateSuperAdminPassword;
+const getPolicies = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const adminId = req.params.id;
+        const admin = yield SuperAdmin_1.default.findById(adminId).select("terms privacyPolicy renewalRules");
+        if (!admin)
+            return res.status(404).json({ error: "SuperAdmin not found" });
+        res.json(admin);
+    }
+    catch (err) {
+        res.status(500).json({ error: "Failed to fetch policies" });
+    }
+});
+exports.getPolicies = getPolicies;
+// Update SuperAdmin policies
+const updatePolicies = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const adminId = req.params.id;
+        const { terms, privacyPolicy, renewalRules } = req.body;
+        const admin = yield SuperAdmin_1.default.findById(adminId);
+        if (!admin)
+            return res.status(404).json({ error: "SuperAdmin not found" });
+        admin.terms = terms || admin.terms;
+        admin.privacyPolicy = privacyPolicy || admin.privacyPolicy;
+        admin.renewalRules = renewalRules || admin.renewalRules;
+        yield admin.save();
+        res.json(admin);
+    }
+    catch (err) {
+        res.status(500).json({ error: "Failed to update policies" });
+    }
+});
+exports.updatePolicies = updatePolicies;

@@ -11,4 +11,7 @@ router.post("/register", superadminController_1.registerSuperAdmin);
 router.post("/login", superadminController_1.loginSuperAdmin);
 router.put("/update-profile/:id", upload_1.upload.single("profileImage"), superadminController_1.updateSuperAdminProfile);
 router.put("/update-password/:id", superadminController_1.updateSuperAdminPassword);
+router.get("/:id/policies", superadminController_1.getPolicies);
+// Update policies for a superadmin
+router.put("/:id/policies", superadminController_1.updatePolicies);
 exports.default = router;

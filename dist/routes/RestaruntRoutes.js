@@ -10,10 +10,10 @@ const router = (0, express_1.Router)();
 router.get("/", restaruntController_1.getRestaurants); // Get all restaurants
 router.get("/:id", restaruntController_1.getRestaurantById); // Get restaurant by ID
 // ----------------- PROTECTED ROUTES (SUPERADMIN ONLY) -----------------
-router.post("/", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), upload_1.upload.single("image"), restaruntController_1.createRestaurant);
-router.put("/:id", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), upload_1.upload.single("image"), restaruntController_1.updateRestaurant);
-router.delete("/:id", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), upload_1.upload.single("image"), restaruntController_1.deleteRestaurant);
+router.post("/", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), upload_1.upload.single("image"), restaruntController_1.createRestaurant);
+router.put("/:id", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), upload_1.upload.single("image"), restaruntController_1.updateRestaurant);
+router.delete("/:id", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), upload_1.upload.single("image"), restaruntController_1.deleteRestaurant);
 // Add products to restaurant
-router.post("/:restaurantId/menu", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), upload_1.upload.single("image"), restaruntController_1.addProductToMenu);
-router.post("/:restaurantId/popularMenu", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), upload_1.upload.single("image"), restaruntController_1.addProductToPopularMenu);
+router.post("/:restaurantId/menu", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), upload_1.upload.single("image"), restaruntController_1.addProductToMenu);
+router.post("/:restaurantId/popularMenu", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), upload_1.upload.single("image"), restaruntController_1.addProductToPopularMenu);
 exports.default = router;

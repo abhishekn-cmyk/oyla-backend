@@ -12,41 +12,57 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.protect = exports.generateToken = void 0;
+exports.generateToken = exports.protect = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const express_async_handler_1 = __importDefault(require("express-async-handler"));
-const SuperAdmin_1 = __importDefault(require("../models/SuperAdmin"));
 const User_1 = __importDefault(require("../models/User"));
-const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret_key";
-const generateToken = (userId, role) => { return jsonwebtoken_1.default.sign({ id: userId, role }, JWT_SECRET, { expiresIn: "30d" }); };
-exports.generateToken = generateToken;
+const SuperAdmin_1 = __importDefault(require("../models/SuperAdmin"));
 exports.protect = (0, express_async_handler_1.default)((req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        res.status(401).json({ success: false, message: "Not authorized, no token" });
-        throw new Error("Not authorized, no token");
-    }
-    const token = authHeader.split(" ")[1];
-    let decoded;
     try {
-        decoded = jsonwebtoken_1.default.verify(token, JWT_SECRET);
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+            res.status(401).json({ success: false, message: "Not authorized, no token" });
+            return;
+        }
+        const token = authHeader.split(" ")[1];
+        const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
+        if (!decoded.sub || !decoded.role) {
+            res.status(401).json({ success: false, message: "Token payload invalid" });
+            return;
+        }
+        let user = null;
+        if (decoded.role.toLowerCase() === "superadmin") {
+            user = yield SuperAdmin_1.default.findById(decoded.sub).select("-password");
+        }
+        else {
+            user = yield User_1.default.findById(decoded.sub).select("-password");
+        }
+        if (!user) {
+            res.status(401).json({ success: false, message: "User not found" });
+            return;
+        }
+        // Map Mongoose document to plain object
+        req.user = {
+            _id: user.id.toString(),
+            role: user.role,
+            email: "email" in user ? user.email : undefined,
+            username: "username" in user ? user.username : undefined,
+        };
+        next();
     }
-    catch (error) {
-        res.status(401).json({ success: false, message: "Token is invalid" });
-        throw new Error("Token is invalid");
+    catch (err) {
+        console.error("Protect middleware error:", err);
+        res.status(401).json({ success: false, message: "Token is invalid or expired" });
     }
-    // Make role case-insensitive
-    const role = (_a = decoded.role) === null || _a === void 0 ? void 0 : _a.toLowerCase();
-    let user;
-    if (role === "user")
-        user = yield User_1.default.findById(decoded.id);
-    else if (role === "superadmin")
-        user = yield SuperAdmin_1.default.findById(decoded.id);
-    if (!user) {
-        res.status(401).json({ success: false, message: "User not found" });
-        throw new Error("User not found");
-    }
-    req.user = user;
-    next();
 }));
+const generateToken = (id, role) => {
+    const secret = process.env.JWT_SECRET;
+    if (!secret)
+        throw new Error('JWT_SECRET is not defined');
+    const payload = { sub: id, role };
+    // Ensure expiresIn is correctly typed
+    const expiresIn = process.env.JWT_EXPIRE || '30d';
+    const options = { expiresIn };
+    return jsonwebtoken_1.default.sign(payload, secret, options);
+};
+exports.generateToken = generateToken;

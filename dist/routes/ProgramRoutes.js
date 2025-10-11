@@ -13,7 +13,7 @@ const router = express_1.default.Router();
 router.get("/", ProgramController_1.getPrograms); // Get all programs
 router.get("/search", ProgramController_1.searchPrograms); // Search programs (public)
 // ----------------- PROTECTED ROUTES (SUPERADMIN ONLY) -----------------
-router.post("/", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), upload_1.upload.single("image"), ProgramController_1.createProgram); // Create program
-router.put("/:id", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), upload_1.upload.single("image"), ProgramController_1.updateProgram); // Update program
-router.delete("/:id", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), ProgramController_1.deleteProgram); // Delete program
+router.post("/", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), upload_1.upload.single("image"), ProgramController_1.createProgram); // Create program
+router.put("/:id", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), upload_1.upload.single("image"), ProgramController_1.updateProgram); // Update program
+router.delete("/:id", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), ProgramController_1.deleteProgram); // Delete program
 exports.default = router;

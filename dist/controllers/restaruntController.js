@@ -14,7 +14,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.addProductToPopularMenu = exports.addProductToMenu = exports.deleteRestaurant = exports.updateRestaurant = exports.getRestaurantById = exports.getRestaurants = exports.createRestaurant = void 0;
 const Restaurant_1 = __importDefault(require("../models/Restaurant"));
-const Product_1 = __importDefault(require("../models/Product"));
 // -------------------- RESTAURANT CRUD --------------------
 // CREATE a restaurant
 const createRestaurant = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -100,6 +99,7 @@ const parseProductFields = (body, file) => ({
     nutrition: body.nutrition ? JSON.parse(body.nutrition) : {},
     ingredients: body.ingredients ? JSON.parse(body.ingredients) : [],
     availableDates: body.availableDates ? JSON.parse(body.availableDates) : [],
+    availableDays: body.availableDays,
     image: file === null || file === void 0 ? void 0 : file.path,
     stock: Number(body.stock) || 0,
 });
@@ -111,15 +111,13 @@ const addProductToMenu = (req, res) => __awaiter(void 0, void 0, void 0, functio
             return res.status(404).json({ message: "Restaurant not found" });
         // Save product first
         const productData = parseProductFields(req.body, req.file);
-        const product = new Product_1.default(productData);
-        yield product.save();
         // Push product ID only
-        restaurant.menu.push(product._id);
+        restaurant.menu.push(productData._id);
         if (req.body.isPopular) {
-            restaurant.popularMenu.push(product._id);
+            restaurant.popularMenu.push(productData._id);
         }
         yield restaurant.save();
-        res.status(201).json({ restaurant, product });
+        res.status(201).json({ restaurant, product: productData });
     }
     catch (error) {
         console.error("Error adding product to menu:", error);
@@ -134,12 +132,10 @@ const addProductToPopularMenu = (req, res) => __awaiter(void 0, void 0, void 0, 
         if (!restaurant)
             return res.status(404).json({ message: "Restaurant not found" });
         const productData = parseProductFields(req.body, req.file);
-        const product = new Product_1.default(productData);
-        yield product.save();
         // Only push the product ID
-        restaurant.popularMenu.push(product._id);
+        restaurant.popularMenu.push(productData._id);
         yield restaurant.save();
-        res.status(201).json({ restaurant, product });
+        res.status(201).json({ restaurant, product: productData });
     }
     catch (error) {
         console.error("Error adding product to popular menu:", error);

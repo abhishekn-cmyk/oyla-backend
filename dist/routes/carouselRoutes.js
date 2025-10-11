@@ -11,16 +11,16 @@ const upload_1 = require("../middleware/upload");
 const router = express_1.default.Router();
 // ------------------ Admin / SuperAdmin Routes ------------------
 // Create a carousel slide (SuperAdmin only)
-router.post("/", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), upload_1.upload.single('image'), Carouselcontroller_1.createCarousel);
+router.post("/", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), upload_1.upload.single('image'), Carouselcontroller_1.createCarousel);
 // Update a carousel slide by ID (SuperAdmin only)
-router.put("/:id", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), upload_1.upload.single('image'), Carouselcontroller_1.updateCarousel);
+router.put("/:id", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), upload_1.upload.single('image'), Carouselcontroller_1.updateCarousel);
 // Delete a carousel slide by ID (SuperAdmin only)
-router.delete("/:id", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), Carouselcontroller_1.deleteCarousel);
+router.delete("/:id", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), Carouselcontroller_1.deleteCarousel);
 // ------------------ Public / User Routes ------------------
 // Get all active carousel slides (for users)
 router.get("/active", Carouselcontroller_1.getActiveCarousels);
 // Get all carousel slides (SuperAdmin only)
-router.get("/", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), Carouselcontroller_1.getAllCarousels);
+router.get("/", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), Carouselcontroller_1.getAllCarousels);
 // Get a carousel slide by ID (SuperAdmin only)
-router.get("/:id", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), Carouselcontroller_1.getCarouselById);
+router.get("/:id", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), Carouselcontroller_1.getCarouselById);
 exports.default = router;

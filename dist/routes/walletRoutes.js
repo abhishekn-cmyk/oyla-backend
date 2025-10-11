@@ -12,15 +12,15 @@ const router = express_1.default.Router();
 // Wallet Routes
 // ============================
 // Top-up wallet (user)
-router.post("/topup", protect_1.protect, (0, auth_1.authorize)(["User"]), WalletController_1.topupWallet);
+router.post("/topup", protect_1.protect, (0, auth_1.authorize)(["user"]), WalletController_1.topupWallet);
 // Spend wallet (user)
-router.post("/spend", protect_1.protect, (0, auth_1.authorize)(["User"]), WalletController_1.spendWallet);
+router.post("/spend", protect_1.protect, (0, auth_1.authorize)(["user"]), WalletController_1.spendWallet);
 // Withdraw wallet (user)
-router.post("/withdraw", protect_1.protect, (0, auth_1.authorize)(["User"]), WalletController_1.withdrawWallet);
+router.post("/withdraw", protect_1.protect, (0, auth_1.authorize)(["user"]), WalletController_1.withdrawWallet);
 // Get wallet with recent transactions (user)
-router.get("/:userId", protect_1.protect, (0, auth_1.authorize)(["User"]), WalletController_1.getWallet);
+router.get("/:userId", protect_1.protect, (0, auth_1.authorize)(["user"]), WalletController_1.getWallet);
 // Get wallet balance only (user)
-router.get("/balance/:userId", protect_1.protect, (0, auth_1.authorize)(["User"]), WalletController_1.getWalletBalance);
-// Get all wallet histories (SuperAdmin only)
-router.get("/histories/all", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), WalletController_1.getAllWalletHistories);
+router.get("/balance/:userId", protect_1.protect, (0, auth_1.authorize)(["user"]), WalletController_1.getWalletBalance);
+// Get all wallet histories (superadmin only)
+router.get("/histories/all", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), WalletController_1.getAllWalletHistories);
 exports.default = router;

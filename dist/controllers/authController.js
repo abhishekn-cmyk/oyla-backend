@@ -53,12 +53,12 @@ const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const isMatch = yield (0, hash_1.comparePassword)(password, user.password);
         if (!isMatch)
             return res.status(400).json({ message: "Invalid password" });
-        const token = (0, protect_1.generateToken)(user._id.toString(), user.role);
+        const token = (0, protect_1.generateToken)(user.id.toString(), user.role);
         res.status(200).json({
             message: "Login successful",
             user: {
                 id: user._id,
-                name: user.username,
+                name: user.username || user.email || "User",
                 email: user.email,
                 role: user.role,
             },
@@ -67,7 +67,7 @@ const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
     catch (err) {
         console.error("Login error:", err);
-        res.status(500).json({ error: err });
+        res.status(500).json({ error: err.message || err });
     }
 });
 exports.login = login;

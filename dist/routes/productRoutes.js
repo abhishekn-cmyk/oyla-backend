@@ -20,11 +20,13 @@ router.get("/program/:programId", ProductController_1.getProductsByProgram); // 
 router.get("/program/:programId/category/:category", ProductController_1.getProgramProductsByCategory); // Get program products by category
 // ----------------- PROTECTED ROUTES (SUPERADMIN ONLY) -----------------
 // Standalone products
-router.post("/", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), upload_1.upload.single("image"), ProductController_1.createProduct);
-router.put("/:id", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), upload_1.upload.single("image"), ProductController_1.updateProduct);
-router.delete("/:id", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), ProductController_1.deleteProduct);
+router.post("/", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), upload_1.upload.single("image"), ProductController_1.createProduct);
+router.put("/:id", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), upload_1.upload.single("image"), ProductController_1.updateProduct);
+router.delete("/:id", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), ProductController_1.deleteProduct);
 // Program products
-router.post("/program/:programId", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), upload_1.upload.single("image"), ProductController_1.addProgramProduct);
-router.put("/program/:programId/product/:productId", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), upload_1.upload.single("image"), ProductController_1.updateProgramProduct);
-router.delete("/program/:programId/product/:productId", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), ProductController_1.deleteProgramProduct);
+router.post("/program/:programId", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), upload_1.upload.single("image"), ProductController_1.addProgramProduct);
+router.put("/program/:programId/product/:productId", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), upload_1.upload.single("image"), ProductController_1.updateProgramProduct);
+router.delete("/program/:programId/product/:productId", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), ProductController_1.deleteProgramProduct);
+router.post('/products/:productId/add-expense', ProductController_1.addProductExpense);
+router.get('/products/:productId/financials', ProductController_1.getProductFinancials);
 exports.default = router;

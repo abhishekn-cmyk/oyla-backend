@@ -13,9 +13,9 @@ const router = express_1.default.Router();
 router.get("/", successController_1.getSuccessStories); // get all stories
 router.get("/:id", successController_1.getSuccessStoryById); // get story by ID
 // -------------------- PROTECTED ROUTES --------------------
-// Only logged-in + SuperAdmin can create, update, delete
-router.post("/", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), upload_1.upload.single("image"), // upload single image
+// Only logged-in + superadmin can create, update, delete
+router.post("/", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), upload_1.upload.single("image"), // upload single image
 successController_1.createSuccessStory);
-router.put("/:id", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), upload_1.upload.single("image"), successController_1.updateSuccessStory);
-router.delete("/:id", protect_1.protect, (0, auth_1.authorize)(["SuperAdmin"]), successController_1.deleteSuccessStory);
+router.put("/:id", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), upload_1.upload.single("image"), successController_1.updateSuccessStory);
+router.delete("/:id", protect_1.protect, (0, auth_1.authorize)(["superadmin"]), successController_1.deleteSuccessStory);
 exports.default = router;
