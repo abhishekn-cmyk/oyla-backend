@@ -379,11 +379,16 @@ export const toggleDailyOrderStatus = async (req: Request, res: Response) => {
 };
 
 
-
 export const updateOrderStatus = async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
-    const { status } = req.body;
+    let { status } = req.body;
+
+    if (!status) return res.status(400).json({ message: "Status is required" });
+
+    // Normalize status
+    status = status.toLowerCase();
+    // console.log("Incoming status:", status);
 
     // 1️⃣ Fetch order
     const order = await DailyOrder.findById(orderId).populate("meals.productId");
@@ -391,22 +396,27 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 
     const now = new Date();
 
-    // 2️⃣ Update each meal status and history
+    // 2️⃣ Update meal statuses & history
     order.meals.forEach((meal) => {
       meal.status = status;
-
       if (!meal.statusHistory) meal.statusHistory = [];
       meal.statusHistory.push({ status, updatedAt: now });
 
+      // Meal-level delay for delayed meals
       if (status === "delayed" && meal.expectedDeliveryTime) {
         const delayMs = now.getTime() - new Date(meal.expectedDeliveryTime).getTime();
-        meal.delayMinutes = Math.floor(delayMs / 1000 / 60).toString();
+        const totalSeconds = Math.floor(delayMs / 1000);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+
+        meal.delayMinutes = `${hours} hr ${minutes} min ${seconds} sec`;
       }
     });
 
-    // 3️⃣ Map meal statuses to order status
+    // 3️⃣ Map meal status → order status
     const mapMealToOrderStatus = (mealStatus: string): typeof order.orderStatus => {
-      switch (mealStatus) {
+      switch (mealStatus.toLowerCase()) {
         case "scheduled":
           return "confirmed";
         case "preparing":
@@ -414,7 +424,6 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
         case "prepared":
           return "prepared";
         case "dispatched":
-          return "out_for_delivery";
         case "out_for_delivery":
           return "out_for_delivery";
         case "delivered":
@@ -432,49 +441,65 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
       }
     };
 
-    // 🧠 Set the order’s own status properly
     order.orderStatus = mapMealToOrderStatus(status);
+    // console.log("Mapped orderStatus:", order.orderStatus);
 
-    // 4️⃣ Calculate order-level delay (if delayed)
-    if (status === "delayed") {
-      const delayMs = now.getTime() - new Date(order.updatedAt).getTime();
-      order.delayDuration = Math.floor(delayMs / 1000 / 60).toString(); // minutes
-      
+    // 4️⃣ Calculate order-level delay **only when delivered**
+    if (status === "delivered") {
+      let maxDelayMs = 0;
+
+      order.meals.forEach((meal) => {
+        if (meal.expectedDeliveryTime) {
+          const mealDelay = now.getTime() - new Date(meal.expectedDeliveryTime).getTime();
+          if (mealDelay > maxDelayMs) maxDelayMs = mealDelay;
+        }
+      });
+
+      if (maxDelayMs > 0) {
+              const totalSeconds = maxDelayMs / 1000; // keep fraction
+              const hours = Math.floor(totalSeconds / 3600);
+              const minutes = Math.floor((totalSeconds % 3600) / 60);
+              const seconds = (totalSeconds % 60).toFixed(2); // keep 2 decimal places
+
+              order.delayDuration = `${hours} hr ${minutes} min ${seconds} sec`;
+            } else {
+              order.delayDuration = "0.00 sec"; // delivered exactly on time
+            }
+
     }
-     
+
     await order.save();
 
     // 5️⃣ Update Delivery + Partner Stats
     const deliveries = await Delivery.find({ orderId });
     const partnerIds = [...new Set(deliveries.map((d) => d.driverId?.toString()))];
 
-  await Promise.all(
-  partnerIds.map(async (partnerId) => {
-    if (!partnerId) return;
+    await Promise.all(
+      partnerIds.map(async (partnerId) => {
+        if (!partnerId) return;
 
-    // Update delivery status for this order
-    await Delivery.updateMany({ orderId, driverId: partnerId }, { deliveryStatus: status });
+        // Update delivery status for this order
+        await Delivery.updateMany({ orderId, driverId: partnerId }, { deliveryStatus: status });
 
-    const partner = await DeliveryPartner.findById(partnerId) as any;
-    if (!partner) return;
+        // Fetch partner
+        const partner = await DeliveryPartner.findById(partnerId) as any;
+        if (!partner) return;
 
-    // Always update total deliveries
-    partner.totalDeliveries = await Delivery.countDocuments({ driverId: partnerId });
+        // Always update total deliveries
+        partner.totalDeliveries = await Delivery.countDocuments({ driverId: partnerId });
+        
 
-    // Increment counts based on current status
-    if (status === "delivered") {
-      partner.completedDeliveries = (partner.completedDeliveries || 0) + 1;
-    }
+        // Increment completed / delayed counts
+        if (status === "delivered") {
+          partner.completedDeliveries = (partner.completedDeliveries || 0) + 1;
+        }
+        if (status === "delayed") {
+          partner.delayedDeliveries = (partner.delayedDeliveries || 0) + 1;
+        }
 
-    if (status === "delayed") {
-      partner.delayedDeliveries = (partner.delayedDeliveries || 0) + 1;
-    }
-
-    await partner.save();
-  })
-);
-
-
+        await partner.save();
+      })
+    );
 
     res.json({
       message: "✅ Order, meals, deliveries, and partner stats updated successfully",

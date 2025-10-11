@@ -14,7 +14,7 @@ export interface IDeliveryPartner extends Document {
   currentStatus: "available" | "busy" | "offline";
   totalDeliveries: number;
   completedDeliveries: number;
-
+   delayedDeliveries:number;
   rating: number;
   earnings: {
     total: number;
@@ -43,6 +43,7 @@ const DeliveryPartnerSchema = new Schema<IDeliveryPartner>(
     isActive: { type: Boolean, default: true },
     currentStatus: { type: String, enum: ["available", "busy", "offline"], default: "offline" },
     totalDeliveries: { type: Number, default: 0 },
+    delayedDeliveries:{type:Number,default:0},
     completedDeliveries: { type: Number, default: 0 },
     rating: { type: Number, default: 0 },
     earnings: {

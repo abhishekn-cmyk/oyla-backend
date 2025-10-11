@@ -712,19 +712,45 @@ export const getRevenueReport = async (req: Request, res: Response) => {
 
 export const getDeliveryDelayReport = async (req: Request, res: Response) => {
   try {
+    // 1️⃣ Fetch delayed orders from DailyOrder
     const delayedOrders = await DailyOrder.find({
       $or: [
-        { orderStatus: "delayed" }, // check orderStatus
-        { status: "delayed" },      // check order-level status if exists
-        { "meals.status": "delayed" } ,{paymentStatus:"delayed"}// check meals
-      ]
+        { orderStatus: "delayed" },
+        { paymentStatus: "delayed" },
+        { "meals.status": "delayed" },
+      ],
     })
       .populate("userId")
       .populate("subscriptionId")
       .populate("meals.productId")
       .lean();
 
-    res.json({ delayedOrders, count: delayedOrders.length });
+    // 2️⃣ Fetch deliveries linked to these orders that are delayed
+    const orderIds = delayedOrders.map((o) => o._id);
+    const delayedDeliveries = await Delivery.find({
+      orderId: { $in: orderIds },
+      deliveryStatus: "delayed",
+    })
+      .populate("driverId") // delivery partner info
+      .lean();
+   
+    // 3️⃣ Combine data per order if needed
+    const report = delayedOrders.map((order) => {
+      const deliveries = delayedDeliveries.filter(
+        (d) => d.orderId.toString() === order._id.toString()
+      );
+
+      return {
+        ...order,
+        delayedDeliveries: deliveries,
+        delayedDeliveryCount: deliveries.length,
+      };
+    });
+    
+    res.json({
+      delayedOrders: report,
+      count: report.length,
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error fetching delivery delays", error });
