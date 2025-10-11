@@ -1497,9 +1497,6 @@ export const paySubscriptionAmount = async (req: Request, res: Response) => {
 };
 
 
-export const deliveryfee=async(req:Request,res:Response)=>{
-  
-}
 
 
 
