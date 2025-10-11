@@ -439,36 +439,41 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     if (status === "delayed") {
       const delayMs = now.getTime() - new Date(order.updatedAt).getTime();
       order.delayDuration = Math.floor(delayMs / 1000 / 60).toString(); // minutes
+      
     }
-
+     
     await order.save();
 
     // 5️⃣ Update Delivery + Partner Stats
     const deliveries = await Delivery.find({ orderId });
     const partnerIds = [...new Set(deliveries.map((d) => d.driverId?.toString()))];
 
-   await Promise.all(
+  await Promise.all(
   partnerIds.map(async (partnerId) => {
     if (!partnerId) return;
 
-    // Update all deliveries for this order + partner
+    // Update delivery status for this order
     await Delivery.updateMany({ orderId, driverId: partnerId }, { deliveryStatus: status });
 
-    const partner = await DeliveryPartner.findById(partnerId);
+    const partner = await DeliveryPartner.findById(partnerId) as any;
     if (!partner) return;
 
-    // ✅ Total deliveries = all deliveries assigned to this partner
+    // Always update total deliveries
     partner.totalDeliveries = await Delivery.countDocuments({ driverId: partnerId });
 
-    // ✅ Completed deliveries = all deliveries with deliveryStatus "delivered"
-    partner.completedDeliveries = await Delivery.countDocuments({
-      driverId: partnerId,
-      deliveryStatus: "delivered",
-    });
+    // Increment counts based on current status
+    if (status === "delivered") {
+      partner.completedDeliveries = (partner.completedDeliveries || 0) + 1;
+    }
+
+    if (status === "delayed") {
+      partner.delayedDeliveries = (partner.delayedDeliveries || 0) + 1;
+    }
 
     await partner.save();
   })
 );
+
 
 
     res.json({
