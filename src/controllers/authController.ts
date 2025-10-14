@@ -4,6 +4,7 @@ import { hashPassword, comparePassword } from "../util/hash";
 import crypto from "crypto";
 import moment from "moment";
 import { generateToken } from "../middleware/protect"; // your JWT generator
+import { sendEmail } from "../services/emailService";
 
 // ==================== Signup ====================
 export const signup = async (req: Request, res: Response) => {
@@ -58,44 +59,73 @@ export const login = async (req: Request, res: Response) => {
   }
 };
 
-// ==================== Send OTP ====================
 export const sendOtp = async (req: Request, res: Response) => {
   const { email } = req.body;
+
   try {
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ message: "User not found" });
 
+    // Generate 6-digit OTP
     const otpCode = crypto.randomInt(100000, 999999).toString();
+
+    // Save OTP and expiry in DB
     user.otpCode = otpCode;
+    user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // expires in 10 min
     await user.save();
 
-    // TODO: send OTP to email/mobile
-    res.status(200).json({ message: "OTP sent", otp: otpCode }); // remove otp in production
+    // Send OTP via email
+    const subject = "Your OTP Code";
+    const text = `Your OTP code is ${otpCode}. It is valid for 10 minutes.`;
+
+    await sendEmail(email, subject, text);
+
+    res.status(200).json({ message: "OTP sent successfully" });
   } catch (err) {
     console.error("Send OTP error:", err);
-    res.status(500).json({ error: err });
+    res.status(500).json({ error: "Failed to send OTP" });
   }
 };
 
 // ==================== Verify OTP ====================
 export const verifyOtp = async (req: Request, res: Response) => {
   const { email, otpCode } = req.body;
+
   try {
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ message: "User not found" });
-    if (user.otpCode !== otpCode) return res.status(400).json({ message: "Invalid OTP" });
 
+    if (!user.otpCode || !user.otpExpiry) {
+      return res.status(400).json({ message: "No OTP found. Please request a new one." });
+    }
+
+    // Check if OTP matches
+    if (user.otpCode !== otpCode) {
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
+    // Check if OTP is expired
+    if (user.otpExpiry < new Date()) {
+      return res.status(400).json({ message: "OTP has expired. Please request a new one." });
+    }
+
+    // OTP is valid → verify user
     user.isVerified = true;
     user.otpCode = undefined;
+    
     await user.save();
 
-    res.status(200).json({ message: "OTP verified", user });
+    // Send confirmation email
+    const subject = "Your account is verified ✅";
+    const text = `Hello ${user.username || user.email},\n\nYour account has been successfully verified. You can now log in.\n\nBest regards,\nOYLS Team`;
+    await sendEmail(email, subject, text);
+
+    res.status(200).json({ message: "OTP verified successfully. Confirmation email sent.", user });
   } catch (err) {
     console.error("Verify OTP error:", err);
-    res.status(500).json({ error: err });
+    res.status(500).json({ error: "Server error" });
   }
 };
-
 // ==================== Social Login ====================
 export const socialLogin = async (req: Request, res: Response) => {
   const { email, googleId, facebookId, firstName, lastName } = req.body;

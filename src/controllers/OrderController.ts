@@ -239,6 +239,8 @@ export const getAllDailyOrders = async (req: Request, res: Response) => {
 
 
 
+
+
 // ------------------- Get DailyOrders by User -------------------
 export const getDailyOrdersByUser = async (req: Request, res: Response) => {
   try {
@@ -386,9 +388,8 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 
     if (!status) return res.status(400).json({ message: "Status is required" });
 
-    // Normalize status
-    status = status.toLowerCase();
-    // console.log("Incoming status:", status);
+    // ✅ Normalize status (handles "Delayed", "DELAYED", etc.)
+    status = status.toString().trim().toLowerCase();
 
     // 1️⃣ Fetch order
     const order = await DailyOrder.findById(orderId).populate("meals.productId");
@@ -396,25 +397,24 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 
     const now = new Date();
 
-    // 2️⃣ Update meal statuses & history
+    // 2️⃣ Update each meal
     order.meals.forEach((meal) => {
       meal.status = status;
       if (!meal.statusHistory) meal.statusHistory = [];
       meal.statusHistory.push({ status, updatedAt: now });
 
-      // Meal-level delay for delayed meals
+      // Handle delay timing
       if (status === "delayed" && meal.expectedDeliveryTime) {
         const delayMs = now.getTime() - new Date(meal.expectedDeliveryTime).getTime();
         const totalSeconds = Math.floor(delayMs / 1000);
         const hours = Math.floor(totalSeconds / 3600);
         const minutes = Math.floor((totalSeconds % 3600) / 60);
         const seconds = totalSeconds % 60;
-
         meal.delayMinutes = `${hours} hr ${minutes} min ${seconds} sec`;
       }
     });
 
-    // 3️⃣ Map meal status → order status
+    // 3️⃣ Map meal → order status
     const mapMealToOrderStatus = (mealStatus: string): typeof order.orderStatus => {
       switch (mealStatus.toLowerCase()) {
         case "scheduled":
@@ -442,57 +442,67 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     };
 
     order.orderStatus = mapMealToOrderStatus(status);
-    // console.log("Mapped orderStatus:", order.orderStatus);
 
-    // 4️⃣ Calculate order-level delay **only when delivered**
-    if (status === "delivered") {
+    // 4️⃣ Calculate delay (for delivered)
+    if (status === "delivered" || status === "delayed") {
       let maxDelayMs = 0;
 
       order.meals.forEach((meal) => {
         if (meal.expectedDeliveryTime) {
-          const mealDelay = now.getTime() - new Date(meal.expectedDeliveryTime).getTime();
-          if (mealDelay > maxDelayMs) maxDelayMs = mealDelay;
+          const delay = now.getTime() - new Date(meal.expectedDeliveryTime).getTime();
+          if (delay > maxDelayMs) maxDelayMs = delay;
         }
       });
 
       if (maxDelayMs > 0) {
-              const totalSeconds = maxDelayMs / 1000; // keep fraction
-              const hours = Math.floor(totalSeconds / 3600);
-              const minutes = Math.floor((totalSeconds % 3600) / 60);
-              const seconds = (totalSeconds % 60).toFixed(2); // keep 2 decimal places
-
-              order.delayDuration = `${hours} hr ${minutes} min ${seconds} sec`;
-            } else {
-              order.delayDuration = "0.00 sec"; // delivered exactly on time
-            }
-
+        const totalSeconds = maxDelayMs / 1000;
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = (totalSeconds % 60).toFixed(2);
+        order.delayDuration = `${hours} hr ${minutes} min ${seconds} sec`;
+      } else {
+        order.delayDuration = "0.00 sec";
+      }
     }
 
     await order.save();
 
-    // 5️⃣ Update Delivery + Partner Stats
+    // 5️⃣ Update Delivery & Partner
     const deliveries = await Delivery.find({ orderId });
-    const partnerIds = [...new Set(deliveries.map((d) => d.driverId?.toString()))];
+    const partnerIds = [
+      ...new Set(deliveries.map((d) => d.driverId?.toString()).filter(Boolean)),
+    ];
 
     await Promise.all(
       partnerIds.map(async (partnerId) => {
         if (!partnerId) return;
 
-        // Update delivery status for this order
-        await Delivery.updateMany({ orderId, driverId: partnerId }, { deliveryStatus: status });
+        // Update delivery status
+        await Delivery.updateMany(
+          { orderId, driverId: partnerId },
+          { deliveryStatus: status }
+        );
 
-        // Fetch partner
-        const partner = await DeliveryPartner.findById(partnerId) as any;
+        const partner = await DeliveryPartner.findById(partnerId);
         if (!partner) return;
 
-        // Always update total deliveries
-        partner.totalDeliveries = await Delivery.countDocuments({ driverId: partnerId });
-        
+        // Always update total
+        partner.totalDeliveries = await Delivery.countDocuments({
+          driverId: partnerId,
+        });
 
-        // Increment completed / delayed counts
+        // ✅ Handle delivered & delayed stats
         if (status === "delivered") {
           partner.completedDeliveries = (partner.completedDeliveries || 0) + 1;
+
+          const isDelayed =
+            order.delayDuration && !order.delayDuration.startsWith("0");
+          if (isDelayed) {
+            partner.delayedDeliveries =
+              (partner.delayedDeliveries || 0) + 1;
+          }
         }
+
         if (status === "delayed") {
           partner.delayedDeliveries = (partner.delayedDeliveries || 0) + 1;
         }
@@ -501,13 +511,14 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
       })
     );
 
+    // ✅ 6️⃣ Response
     res.json({
       message: "✅ Order, meals, deliveries, and partner stats updated successfully",
       order,
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
+    console.error("❌ Error updating order status:", err);
+    res.status(500).json({ message: "Server error", error: err });
   }
 };
 
@@ -543,6 +554,60 @@ export const updatePaymentStatus = async (req: Request, res: Response) => {
 };
 
 // ------------------- DailyOrder Stats -------------------
+// export const getDailyOrderStats = async (req: Request, res: Response) => {
+//   try {
+//     const dailyOrders = await DailyOrder.find()
+//       .populate("subscriptionId")
+//       .populate("userId")
+//       .populate("meals.productId");
+
+//     const totalOrders = dailyOrders.length;
+//     const statusCount: Record<string, number> = {};
+//     let totalRevenue = 0;
+//     let totalCost = 0;
+
+//     const dailyBreakdown: Record<string, { count: number; revenue: number; cost: number; profit: number }> = {};
+
+//     dailyOrders.forEach((order: any) => {
+//       let orderRevenue = order.meals.reduce((sum: number, meal: any) => sum + (meal.price || 0) * (meal.quantity || 1), 0);
+//       let orderCost = order.meals.reduce((sum: number, meal: any) => sum + (meal.costPrice || 0) * (meal.quantity || 1), 0);
+
+//       totalRevenue += orderRevenue;
+//       totalCost += orderCost;
+
+//       const dateKey = new Date(order.date).toISOString().split("T")[0];
+
+//       if (!dailyBreakdown[dateKey]) dailyBreakdown[dateKey] = { count: 0, revenue: 0, cost: 0, profit: 0 };
+//       dailyBreakdown[dateKey].count += 1;
+//       dailyBreakdown[dateKey].revenue += orderRevenue;
+//       dailyBreakdown[dateKey].cost += orderCost;
+//       dailyBreakdown[dateKey].profit += orderRevenue - orderCost;
+
+//       order.meals.forEach((meal: any) => {
+//         statusCount[meal.status] = (statusCount[meal.status] || 0) + 1;
+//       });
+//     });
+
+//     const dailyOrdersArray = Object.entries(dailyBreakdown)
+//       .map(([date, data]) => ({ date, ...data }))
+//       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+//     res.status(200).json({
+//       totalOrders,
+//       statusCount,
+//       totalRevenue: parseFloat(totalRevenue.toFixed(3)),
+//       totalCost: parseFloat(totalCost.toFixed(3)),
+//       totalProfit: parseFloat((totalRevenue - totalCost).toFixed(3)),
+//       dailyOrders: dailyOrdersArray,
+//       allOrders: dailyOrders,
+//     });
+//   } catch (err: any) {
+//     console.error(err);
+//     res.status(500).json({ message: "Error fetching DailyOrder stats", error: err });
+//   }
+// };
+
+
 export const getDailyOrderStats = async (req: Request, res: Response) => {
   try {
     const dailyOrders = await DailyOrder.find()
@@ -552,29 +617,42 @@ export const getDailyOrderStats = async (req: Request, res: Response) => {
 
     const totalOrders = dailyOrders.length;
     const statusCount: Record<string, number> = {};
+    const paymentMethodDistribution: Record<string, number> = {};
     let totalRevenue = 0;
     let totalCost = 0;
 
     const dailyBreakdown: Record<string, { count: number; revenue: number; cost: number; profit: number }> = {};
 
     dailyOrders.forEach((order: any) => {
-      let orderRevenue = order.meals.reduce((sum: number, meal: any) => sum + (meal.price || 0) * (meal.quantity || 1), 0);
-      let orderCost = order.meals.reduce((sum: number, meal: any) => sum + (meal.costPrice || 0) * (meal.quantity || 1), 0);
+      // Revenue & cost calculations
+      const orderRevenue = order.meals.reduce(
+        (sum: number, meal: any) => sum + (meal.price || 0) * (meal.quantity || 1),
+        0
+      );
+      const orderCost = order.meals.reduce(
+        (sum: number, meal: any) => sum + (meal.costPrice || 0) * (meal.quantity || 1),
+        0
+      );
 
       totalRevenue += orderRevenue;
       totalCost += orderCost;
 
+      // Daily breakdown
       const dateKey = new Date(order.date).toISOString().split("T")[0];
-
       if (!dailyBreakdown[dateKey]) dailyBreakdown[dateKey] = { count: 0, revenue: 0, cost: 0, profit: 0 };
       dailyBreakdown[dateKey].count += 1;
       dailyBreakdown[dateKey].revenue += orderRevenue;
       dailyBreakdown[dateKey].cost += orderCost;
       dailyBreakdown[dateKey].profit += orderRevenue - orderCost;
 
+      // Meal status count
       order.meals.forEach((meal: any) => {
         statusCount[meal.status] = (statusCount[meal.status] || 0) + 1;
       });
+
+      // Payment method count
+      const method = order.paymentMethod || "unknown"; // Fallback if paymentMethod is missing
+      paymentMethodDistribution[method] = (paymentMethodDistribution[method] || 0) + 1;
     });
 
     const dailyOrdersArray = Object.entries(dailyBreakdown)
@@ -584,6 +662,7 @@ export const getDailyOrderStats = async (req: Request, res: Response) => {
     res.status(200).json({
       totalOrders,
       statusCount,
+      paymentMethodDistribution,
       totalRevenue: parseFloat(totalRevenue.toFixed(3)),
       totalCost: parseFloat(totalCost.toFixed(3)),
       totalProfit: parseFloat((totalRevenue - totalCost).toFixed(3)),
@@ -595,6 +674,7 @@ export const getDailyOrderStats = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Error fetching DailyOrder stats", error: err });
   }
 };
+
 // ------------------- Delete DailyOrder -------------------
 export const deleteDailyOrderById = async (req: Request, res: Response) => {
   try {

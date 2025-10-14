@@ -11,6 +11,7 @@ export interface IUser extends Document {
   stripePaymentMethodId:string;
   stripeCustomerId:string;
   role: "user" | "admin" | "superadmin" | "delivery_partner";
+  otpExpiry:Date;
   wallet?:Types.ObjectId[];
   profile: {
     firstName: string;
@@ -38,6 +39,7 @@ const UserSchema = new Schema<IUser>(
     googleId: { type: String },
     facebookId: { type: String },
     otpCode: { type: String },
+    otpExpiry:{type:Date},
     username: { type: String, required: true },
     role: { 
       type: String, 
